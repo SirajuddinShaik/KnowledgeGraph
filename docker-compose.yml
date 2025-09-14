@@ -5,7 +5,7 @@ services:
     ports:
       - "7000:8000"  # Map host port 7000 to container port 8000
     volumes:
-      - kuzu_data:/kuzu/data
+      - ./kuzu_data:/kuzu/data
     environment:
       - KUZU_DATABASE_PATH=/kuzu/data/lightrag.db
       - KUZU_MAX_NUM_THREADS=4

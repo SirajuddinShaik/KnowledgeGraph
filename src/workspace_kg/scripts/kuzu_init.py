@@ -25,14 +25,9 @@ class KuzuSchemaManager:
     def __init__(self, api_url: str = KUZU_API_URL):
         self.api_url = api_url
         self.client = httpx.AsyncClient(base_url=api_url, timeout=30.0)
-        self.entity_schemas = self._load_schema_from_yaml()
-        self.relationship_schemas = { # Define a default relationship schema if not in YAML
-            "Relation": {
-                "type": "STRING",
-                "timestamp": "TIMESTAMP"
-            }
-        }
-        self.relationship_types = ["Relation"] # Default relationship type
+        schema_data = self._load_schema_from_yaml()
+        self.entity_schemas, self.relationship_schemas = self._separate_schemas(schema_data)
+        self.relationship_types = list(self.relationship_schemas.keys())
         self.schema_metadata = { # Placeholder for schema metadata
             "version": "1.0",
             "last_updated": datetime.now().isoformat()
@@ -51,6 +46,31 @@ class KuzuSchemaManager:
         except yaml.YAMLError as e:
             logger.error(f"Error loading YAML schema from {SCHEMA_FILE}: {e}")
             return {}
+
+    def _separate_schemas(self, schema_data: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        """Separate entity and relationship schemas from the loaded YAML data."""
+        entity_schemas = {}
+        relationship_schemas = {}
+        
+        # Known relationship types - add more as needed
+        relationship_types = {"Relation"}
+        
+        for schema_name, schema_def in schema_data.items():
+            if schema_name in relationship_types:
+                relationship_schemas[schema_name] = schema_def
+            else:
+                entity_schemas[schema_name] = schema_def
+        
+        # If no relationship schemas found, use default
+        if not relationship_schemas:
+            relationship_schemas = {
+                "Relation": {
+                    "type": "STRING",
+                    "timestamp": "TIMESTAMP"
+                }
+            }
+        
+        return entity_schemas, relationship_schemas
 
     async def execute_cypher(self, query: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """Execute a Cypher query against Kuzu API"""
@@ -190,8 +210,7 @@ class KuzuSchemaManager:
             logger.info("🗑️ Dropping all tables...")
             
             # First drop relationship tables (including any that might exist)
-            relationship_tables = ["Relation"] + self.relationship_types
-            for rel_table in relationship_tables:
+            for rel_table in self.relationship_types:
                 try:
                     await self.execute_cypher(f"DROP TABLE {rel_table}")
                     logger.info(f"  - Dropped {rel_table} table")
