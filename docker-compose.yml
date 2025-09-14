@@ -1,0 +1,27 @@
+services:
+  kuzu-db:
+    image: kuzudb/api-server:latest
+    container_name: kuzu-lightrag
+    ports:
+      - "7000:8000"  # Map host port 7000 to container port 8000
+    volumes:
+      - kuzu_data:/kuzu/data
+    environment:
+      - KUZU_DATABASE_PATH=/kuzu/data/lightrag.db
+      - KUZU_MAX_NUM_THREADS=4
+      - KUZU_MAX_CONCURRENT_QUERIES=8
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  kuzu_data:
+    driver: local
+
+networks:
+  default:
+    name: lightrag-network

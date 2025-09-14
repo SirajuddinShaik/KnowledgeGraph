@@ -1,0 +1,109 @@
+# ==================== PEOPLE & ORGANIZATION ====================
+Person:
+  entity_id: STRING PRIMARY KEY
+  name: STRING
+  email: STRING
+  role: STRING[]
+  aliases: STRING[]
+  sourceSystemId: STRING
+  description: STRING[]
+  lastUpdated: TIMESTAMP
+  embedding: DOUBLE[]
+
+Team:
+  entity_id: STRING PRIMARY KEY
+  name: STRING
+  description: STRING[]
+  lastUpdated: TIMESTAMP
+  embedding: DOUBLE[]
+
+Organization:
+  entity_id: STRING PRIMARY KEY
+  name: STRING
+  domain: STRING
+  description: STRING[]
+  industry: STRING
+  location: STRING[]
+  lastUpdated: TIMESTAMP
+  embedding: DOUBLE[]
+
+# ==================== PROJECTS & WORK ====================
+Project:
+  entity_id: STRING PRIMARY KEY
+  name: STRING
+  description: STRING[]
+  status: STRING
+  startDate: DATE
+  endDate: DATE
+  client: STRING
+  tags: STRING[]
+  lastUpdated: TIMESTAMP
+  embedding: DOUBLE[]
+
+# ==================== CODE & DEVELOPMENT ====================
+Repository:
+  entity_id: STRING PRIMARY KEY
+  name: STRING
+  url: STRING
+  description: STRING[]
+  language: STRING
+  lastUpdated: TIMESTAMP
+  embedding: DOUBLE[]
+
+Branch:
+  entity_id: STRING PRIMARY KEY
+  name: STRING
+  repo: STRING
+  createdBy: STRING
+  createdAt: TIMESTAMP
+  lastUpdated: TIMESTAMP
+  embedding: DOUBLE[]
+
+CodeChangeRequest:
+  entity_id: STRING PRIMARY KEY
+  id: STRING
+  title: STRING
+  description: STRING[]
+  status: STRING
+  author: STRING
+  createdAt: TIMESTAMP
+  mergedAt: TIMESTAMP
+  repo: STRING
+  branch: STRING
+  lastUpdated: TIMESTAMP
+  embedding: DOUBLE[]
+
+Issue:
+  entity_id: STRING PRIMARY KEY
+  id: STRING
+  title: STRING
+  description: STRING[]
+  status: STRING
+  reporter: STRING
+  labels: STRING[]
+  createdAt: TIMESTAMP
+  closedAt: TIMESTAMP
+  lastUpdated: TIMESTAMP
+  embedding: DOUBLE[]
+
+# ==================== EVENTS & COMMUNICATION ====================
+Event:
+  entity_id: STRING PRIMARY KEY
+  id: STRING
+  title: STRING
+  description: STRING[]
+  type: STRING
+  startTime: TIMESTAMP
+  linkedProject: STRING
+  lastUpdated: TIMESTAMP
+  embedding: DOUBLE[]
+
+Topic:
+  entity_id: STRING PRIMARY KEY
+  id: STRING
+  name: STRING
+  keywords: STRING[]
+  relatedThreads: STRING[]
+  description: STRING[]
+  lastUpdated: TIMESTAMP
+  embedding: DOUBLE[]
