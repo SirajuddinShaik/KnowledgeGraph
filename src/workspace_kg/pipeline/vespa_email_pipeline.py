@@ -31,7 +31,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 # Import Vespa integration
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-from vespa_integration import VespaConnector, VespaConfig, VespaDataProcessor
+from workspace_kg.utils.vespa_integration import VespaConnector, VespaConfig, VespaDataProcessor
 
 # Import knowledge graph components
 from workspace_kg.components.entity_extractor import EntityExtractor
