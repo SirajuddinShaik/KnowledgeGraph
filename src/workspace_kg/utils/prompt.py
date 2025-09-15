@@ -102,6 +102,8 @@ Extract the following information for each entity type (all attributes are optio
 **Event**: [id, title, description, type, startTime, linkedProject]
 **Topic**: [id, name, keywords, relatedThreads]
 
+## These are only accepted entity types and attributes. Do not extract any other types or attributes.
+
 ---Email-Specific Instructions---
 2. **Person Entities**: **STRICT PERSON ENTITY REQUIREMENTS** - Only create Person entities when you have UNIQUE IDENTIFYING INFORMATION that enables merging:
    - **REQUIRED**: Email address (preferred) OR specific role/title OR aliases OR other distinguishing attributes

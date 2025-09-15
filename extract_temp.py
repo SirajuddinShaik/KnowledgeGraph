@@ -7,8 +7,10 @@ import sys
 import os
 import asyncio
 import json
-from datetime import datetime
 from typing import Dict, List, Any
+from dotenv import load_dotenv
+# Load environment variables
+load_dotenv()
 
 # Add the src directory to Python path
 src_path = os.path.join(os.path.dirname(__file__), 'src')
@@ -21,13 +23,12 @@ sys.path.insert(0, workspace_kg_path)
 # Direct imports
 from workspace_kg.pipeline.extract_pipeline import ExtractPipeline, load_data_from_json
 from workspace_kg.utils.prompt_factory import DataType
-from workspace_kg.utils.output_formatter import OutputFormat
 
 async def main():
     """Extract entities from temp.json file"""
     
     # Load data from temp.json
-    file_path = "temp.json"
+    file_path = "data/temp.json"
     
     print(f"🔍 Loading data from {file_path}...")
     data_to_process = load_data_from_json(file_path)
@@ -60,21 +61,9 @@ async def main():
     
     print(f"\n✅ Extraction completed successfully!")
     
-    # Export to additional formats
+    # Results are automatically saved as JSON by the pipeline
     if len(results) > 0:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        print(f"\n📤 Exporting to additional formats:")
-        
-        # Export to JSONL
-        jsonl_file = f"data/temp_extracted_{timestamp}.jsonl"
-        await pipeline.save_results(results, jsonl_file, OutputFormat.JSONL)
-        print(f"  📄 JSONL: {jsonl_file}")
-        
-        # Export to CSV
-        csv_file = f"data/temp_extracted_{timestamp}.csv"
-        await pipeline.save_results(results, csv_file, OutputFormat.CSV)
-        print(f"  📊 CSV: {csv_file}")
+        print(f"\n✅ Results saved in JSON format")
         
         # Show sample results
         print(f"\n🔍 Sample extracted data:")

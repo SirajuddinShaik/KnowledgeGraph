@@ -116,13 +116,14 @@ class KuzuSchemaManager:
         
         from_to_str = ",\n            ".join(from_to_combinations)
         
-        # Get relationship attributes
+        # Get relationship attributes (excluding FROM and TO which are handled above)
         rel_attributes = self.relationship_schemas["Relation"]
         attr_definitions = []
         for attr_name, attr_type in rel_attributes.items():
-            attr_definitions.append(f"{attr_name} {attr_type}")
+            if attr_name not in ["FROM", "TO"]:  # Skip FROM and TO as they're handled above
+                attr_definitions.append(f"{attr_name} {attr_type}")
         
-        attributes_str = ",\n            " + ",\n            ".join(attr_definitions)
+        attributes_str = ",\n            " + ",\n            ".join(attr_definitions) if attr_definitions else ""
         
         return f"""
         CREATE REL TABLE IF NOT EXISTS Relation(

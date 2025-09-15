@@ -6,30 +6,33 @@ Person:
   role: STRING[]
   aliases: STRING[]
   sourceSystemId: STRING
+  worksAt: STRING                # organization/company person works at
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   sources: STRING[]              # list of doc/mail/thread IDs
-  lastUpdated: TIMESTAMP
+  lastUpdated: STRING
   embedding: DOUBLE[]
 
 Team:
   entity_id: STRING PRIMARY KEY
   name: STRING
+  aliases: STRING[]
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
-  lastUpdated: TIMESTAMP
+  lastUpdated: STRING
   embedding: DOUBLE[]
 
 Organization:
   entity_id: STRING PRIMARY KEY
   name: STRING
   domain: STRING
+  aliases: STRING[]
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   industry: STRING
   location: STRING[]
   sources: STRING[]
-  lastUpdated: TIMESTAMP
+  lastUpdated: STRING
   embedding: DOUBLE[]
 
 # ==================== PROJECTS & WORK ====================
@@ -40,11 +43,12 @@ Project:
   cleanDescription: STRING       # cleaned/normalized description
   status: STRING
   startDate: DATE
+  aliases: STRING[]
   endDate: DATE
   client: STRING
   tags: STRING[]
   sources: STRING[]
-  lastUpdated: TIMESTAMP
+  lastUpdated: STRING
   embedding: DOUBLE[]
 
 # ==================== CODE & DEVELOPMENT ====================
@@ -56,7 +60,7 @@ Repository:
   cleanDescription: STRING       # cleaned/normalized description
   language: STRING
   sources: STRING[]
-  lastUpdated: TIMESTAMP
+  lastUpdated: STRING
   embedding: DOUBLE[]
 
 Branch:
@@ -66,13 +70,14 @@ Branch:
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   createdBy: STRING
-  createdAt: TIMESTAMP
+  createdAt: STRING
   sources: STRING[]
-  lastUpdated: TIMESTAMP
+  lastUpdated: STRING
   embedding: DOUBLE[]
 
 CodeChangeRequest:   # PullRequest / MergeRequest / CodeReview combined
   entity_id: STRING PRIMARY KEY
+  id: STRING
   title: STRING
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
@@ -81,58 +86,65 @@ CodeChangeRequest:   # PullRequest / MergeRequest / CodeReview combined
   reviewers: STRING[]             # list of Person.entity_id
   repo: STRING
   branch: STRING
-  createdAt: TIMESTAMP
-  mergedAt: TIMESTAMP
+  createdAt: STRING
+  mergedAt: STRING
   sources: STRING[]
-  lastUpdated: TIMESTAMP
+  lastUpdated: STRING
   embedding: DOUBLE[]
 
 Issue:
   entity_id: STRING PRIMARY KEY
-  title: STRING
+  id: STRING
+  name: STRING
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   status: STRING
   reporter: STRING
   assignees: STRING[]
   labels: STRING[]
-  createdAt: TIMESTAMP
-  closedAt: TIMESTAMP
+  createdAt: STRING
+  closedAt: STRING
   sources: STRING[]
-  lastUpdated: TIMESTAMP
+  lastUpdated: STRING
   embedding: DOUBLE[]
 
 Event:
   entity_id: STRING PRIMARY KEY
-  title: STRING
+  id: STRING                     # event identifier from source system
+  name: STRING
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   type: STRING
-  startTime: TIMESTAMP
+  startTime: STRING
   linkedProject: STRING
   sources: STRING[]
-  lastUpdated: TIMESTAMP
+  lastUpdated: STRING
   embedding: DOUBLE[]
 
 Topic:
   entity_id: STRING PRIMARY KEY
+  id: STRING                     # topic identifier from source system
   name: STRING
   keywords: STRING[]
+  aliases: STRING[]
   relatedThreads: STRING[]
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   sources: STRING[]
-  lastUpdated: TIMESTAMP
+  lastUpdated: STRING
   embedding: DOUBLE[]
 
 # ==================== RELATIONSHIPS ====================
+# Generic Relation type to connect any two entities
 Relation:
+  FROM: ANY
+  TO: ANY
   relation_id: STRING PRIMARY KEY
-  from_entity: STRING
   description: STRING
   relationTag: STRING
-  to_entity: STRING
   type: STRING
   strength: FLOAT
-  source: STRING
-  createdAt: TIMESTAMP
+  sources: STRING[]
+  createdAt: STRING
+  lastUpdated: STRING
+  embedding: DOUBLE[]

@@ -3,9 +3,9 @@ services:
     image: kuzudb/api-server:latest
     container_name: kuzu-lightrag
     ports:
-      - "7000:8000"  # Map host port 7000 to container port 8000
+      - "7000:8000"  # Expose API on host:7000
     volumes:
-      - ./kuzu_data:/kuzu/data
+      - ./kuzu_data:/database   # Persist DB to ./kuzu_data folder on host
     environment:
       - KUZU_DATABASE_PATH=/kuzu/data/lightrag.db
       - KUZU_MAX_NUM_THREADS=4
@@ -17,10 +17,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-volumes:
-  kuzu_data:
-    driver: local
 
 networks:
   default:

@@ -14,7 +14,7 @@ class EntityExtractor:
                  model: str = "gemini-2.5-flash",
                  data_type: DataType = DataType.EMAIL,
                  auto_detect_data_type: bool = True):
-        self.client = openai.OpenAI(
+        self.client = openai.AsyncOpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_API_BASE_URL"),
         )
@@ -28,7 +28,7 @@ class EntityExtractor:
         Asynchronously calls the LLM API.
         """
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=0.1

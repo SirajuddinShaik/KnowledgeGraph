@@ -20,16 +20,11 @@ class PromptFactory:
             DataType.EMAIL: EMAIL_SYSTEM_PROMPT,
             DataType.CODE: self._get_code_system_prompt(),
             DataType.DOCUMENT: self._get_document_system_prompt(),
-            DataType.CHAT: self._get_chat_system_prompt(),
-            DataType.MEETING: self._get_meeting_system_prompt(),
         }
         
         self._extraction_templates = {
             DataType.EMAIL: ENTITY_EXTRACTION_PROMPT,
-            DataType.CODE: self._get_code_extraction_template(),
             DataType.DOCUMENT: self._get_document_extraction_template(),
-            DataType.CHAT: self._get_chat_extraction_template(),
-            DataType.MEETING: self._get_meeting_extraction_template(),
         }
     
     def get_system_prompt(self, data_type: DataType) -> str:
