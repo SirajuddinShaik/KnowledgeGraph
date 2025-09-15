@@ -210,3 +210,5 @@ data/
 kuzu_data/
 test*
 research/
+hf_cache/
+models/

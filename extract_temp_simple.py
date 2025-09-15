@@ -93,7 +93,7 @@ IMPORTANT: Return ONLY the tuple format below, end with <|COMPLETE|>:"""
             )
             
             llm_output = response.choices[0].message.content
-            entities, relationships = self.parse_llm_output(llm_output)
+            entities, relationships = self.parse_llm_output(llm_output, item_id)
             
             return {
                 "item_id": item_id,
@@ -117,8 +117,8 @@ IMPORTANT: Return ONLY the tuple format below, end with <|COMPLETE|>:"""
                 "processed_at": datetime.now().isoformat()
             }
 
-    def parse_llm_output(self, llm_output: str) -> tuple:
-        """Parse LLM output to extract entities and relationships"""
+    def parse_llm_output(self, llm_output: str, item_id: str) -> tuple:
+        """Parse LLM output to extract entities and relationships with email source tracking"""
         entities = []
         relationships = []
         
@@ -131,11 +131,11 @@ IMPORTANT: Return ONLY the tuple format below, end with <|COMPLETE|>:"""
                     continue
                     
                 if record.startswith('("entity"'):
-                    entity = self.parse_entity_record(record)
+                    entity = self.parse_entity_record(record, item_id)
                     if entity:
                         entities.append(entity)
                 elif record.startswith('("relationship"'):
-                    relationship = self.parse_relationship_record(record)
+                    relationship = self.parse_relationship_record(record, item_id)
                     if relationship:
                         relationships.append(relationship)
                         
@@ -144,8 +144,8 @@ IMPORTANT: Return ONLY the tuple format below, end with <|COMPLETE|>:"""
             
         return entities, relationships
     
-    def parse_entity_record(self, record: str) -> Dict[str, Any]:
-        """Parse entity record from tuple format"""
+    def parse_entity_record(self, record: str, item_id: str) -> Dict[str, Any]:
+        """Parse entity record from tuple format with email source tracking"""
         try:
             record = record.strip()
             if record.startswith('("entity"') and record.endswith(')'):
@@ -169,6 +169,16 @@ IMPORTANT: Return ONLY the tuple format below, end with <|COMPLETE|>:"""
                         attr_value = attr_match.group(2)
                         attributes[attr_name] = attr_value
             
+            # Always add email source ID to sources array
+            if 'sources' not in attributes:
+                attributes['sources'] = []
+            elif not isinstance(attributes['sources'], list):
+                attributes['sources'] = [attributes['sources']]
+            
+            # Ensure the email source ID is included
+            if item_id not in attributes['sources']:
+                attributes['sources'].append(item_id)
+            
             return {
                 "entity_name": entity_name,
                 "entity_type": entity_type,
@@ -179,8 +189,8 @@ IMPORTANT: Return ONLY the tuple format below, end with <|COMPLETE|>:"""
             print(f"⚠️ Error parsing entity record: {str(e)}")
             return None
     
-    def parse_relationship_record(self, record: str) -> Dict[str, Any]:
-        """Parse relationship record from tuple format"""
+    def parse_relationship_record(self, record: str, item_id: str) -> Dict[str, Any]:
+        """Parse relationship record from tuple format with email source tracking"""
         try:
             record = record.strip()
             if record.startswith('("relationship"') and record.endswith(')'):
@@ -204,7 +214,8 @@ IMPORTANT: Return ONLY the tuple format below, end with <|COMPLETE|>:"""
                 "target_entity": target_entity,
                 "relationship_type": relationship_type,
                 "description": description,
-                "strength": strength
+                "strength": strength,
+                "sources": [item_id]  # Always add email source ID to relationships
             }
             
         except Exception as e:
@@ -257,7 +268,7 @@ async def main():
     print("🚀 Starting entity extraction from temp.json")
     
     # Load data
-    data_to_process = load_temp_json("temp.json")
+    data_to_process = load_temp_json("data/temp.json")
     
     if not data_to_process:
         print("❌ No data found in temp.json")

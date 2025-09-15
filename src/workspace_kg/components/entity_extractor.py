@@ -102,7 +102,7 @@ class EntityExtractor:
             }
 
         try:
-            entities, relationships = self.parse_llm_output(llm_output)
+            entities, relationships = self.parse_llm_output(llm_output, item_id)
             return {
                 "item_id": item_id,
                 "entities": entities,
@@ -130,9 +130,9 @@ class EntityExtractor:
         from datetime import datetime
         return datetime.now().isoformat()
 
-    def parse_llm_output(self, llm_output: str) -> Tuple[List[Dict], List[Dict]]:
+    def parse_llm_output(self, llm_output: str, item_id: str) -> Tuple[List[Dict], List[Dict]]:
         """
-        Parse LLM output to extract entities and relationships
+        Parse LLM output to extract entities and relationships with email source tracking
         """
         entities = []
         relationships = []
@@ -160,11 +160,11 @@ class EntityExtractor:
                     
                 try:
                     if record.startswith('("entity"'):
-                        entity = self.parse_entity_record(record)
+                        entity = self.parse_entity_record(record, item_id)
                         if entity:
                             entities.append(entity)
                     elif record.startswith('("relationship"'):
-                        relationship = self.parse_relationship_record(record)
+                        relationship = self.parse_relationship_record(record, item_id)
                         if relationship:
                             relationships.append(relationship)
                 except Exception as e:
@@ -176,8 +176,8 @@ class EntityExtractor:
             
         return entities, relationships
     
-    def parse_entity_record(self, record: str) -> Dict[str, Any]:
-        """Parse entity record from tuple format"""
+    def parse_entity_record(self, record: str, item_id: str) -> Dict[str, Any]:
+        """Parse entity record from tuple format with email source tracking"""
         try:
             record = record.strip()
             if record.startswith('("entity"') and record.endswith(')'):
@@ -213,6 +213,16 @@ class EntityExtractor:
                         
                         attributes[attr_name] = attr_value
             
+            # Always add email source ID to sources array
+            if 'sources' not in attributes:
+                attributes['sources'] = []
+            elif not isinstance(attributes['sources'], list):
+                attributes['sources'] = [attributes['sources']]
+            
+            # Ensure the email source ID is included
+            if item_id not in attributes['sources']:
+                attributes['sources'].append(item_id)
+            
             return {
                 "entity_name": entity_name,
                 "entity_type": entity_type,
@@ -223,8 +233,8 @@ class EntityExtractor:
             print(f"Error parsing entity record: {str(e)}")
             return None
     
-    def parse_relationship_record(self, record: str) -> Dict[str, Any]:
-        """Parse relationship record from tuple format"""
+    def parse_relationship_record(self, record: str, item_id: str) -> Dict[str, Any]:
+        """Parse relationship record from tuple format with email source tracking"""
         try:
             record = record.strip()
             if record.startswith('("relationship"') and record.endswith(')'):
@@ -249,7 +259,8 @@ class EntityExtractor:
                 "target_entity": target_entity,
                 "relationship_type": relationship_type,
                 "description": description,
-                "strength": strength
+                "strength": strength,
+                "sources": [item_id]  # Always add email source ID to relationships
             }
             
         except Exception as e:

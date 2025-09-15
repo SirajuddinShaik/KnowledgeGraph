@@ -3,15 +3,18 @@ from typing import Dict, Any, List, Optional
 import logging
 import hashlib
 import json
+import os
 
-from src.workspace_kg.utils.kuzu_db_handler import KuzuDBHandler
-from src.workspace_kg.utils.merge_config import merge_config, MergeStrategy
+from workspace_kg.utils.kuzu_db_handler import KuzuDBHandler
+from workspace_kg.utils.merge_config import merge_config, MergeStrategy
+from workspace_kg.components.embedder import InferenceProvider
 
 logger = logging.getLogger(__name__)
 
 class MergeHandler:
     def __init__(self, kuzu_db_handler: KuzuDBHandler):
         self.db_handler = kuzu_db_handler
+        self.inference_provider = InferenceProvider()
 
     def _generate_entity_id(self, entity_type: str, attributes: Dict[str, Any]) -> str:
         """
@@ -468,12 +471,7 @@ class MergeHandler:
         # Add source tracking (only if entity supports sources field)
         if 'sources' in processed and source_item_id not in processed['sources']:
             processed['sources'].append(source_item_id)
-        
-        # Add extraction info to rawDescriptions if not from agent
-        if not is_from_agent:
-            extraction_info = f"Extracted from {source_item_id}: {entity_name}"
-            if extraction_info not in processed['rawDescriptions']:
-                processed['rawDescriptions'].append(extraction_info)
+
         
         # Ensure entity-specific array fields are properly formatted
         entity_array_fields = merge_config.field_mappings.get('entity_array_fields', {}).get(entity_type, [])
@@ -584,6 +582,18 @@ class MergeHandler:
                 entity_id = existing_entity['entity_id']
                 updates = self._merge_attributes(entity_type, existing_entity, processed_attributes)
                 
+                # Generate embedding if significant content has changed
+                if updates and any(field in updates for field in ['name', 'rawDescriptions', 'title', 'description']):
+                    try:
+                        # Create combined entity data for embedding
+                        combined_data = {**existing_entity, **updates}
+                        embedding = self.inference_provider.embed_entity(entity_type, combined_data)
+                        if embedding:
+                            updates['embedding'] = embedding
+                            logger.debug(f"Generated embedding for updated entity {entity_type}:{entity_name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to generate embedding for entity {entity_type}:{entity_name}: {e}")
+                
                 if updates:
                     await self.db_handler.update_entity(entity_type, entity_id, updates)
                 
@@ -593,6 +603,16 @@ class MergeHandler:
                 # Create new entity
                 entity_id = self._generate_entity_id(entity_type, processed_attributes)
                 processed_attributes['entity_id'] = entity_id
+                
+                # Generate embedding for new entity
+                try:
+                    embedding = self.inference_provider.embed_entity(entity_type, processed_attributes)
+                    if embedding:
+                        processed_attributes['embedding'] = embedding
+                        logger.debug(f"Generated embedding for new entity {entity_type}:{entity_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to generate embedding for entity {entity_type}:{entity_name}: {e}")
+                
                 new_entity = await self.db_handler.create_entity(entity_type, processed_attributes)
                 if new_entity:
                     processed_entities[entity_name] = {'entity_id': entity_id, 'entity_type': entity_type}
@@ -646,9 +666,31 @@ class MergeHandler:
                     "sources": [source_item_id],
                     "strength": max(existing_relation.get('strength', 0), strength) # Take max strength
                 }
+                
+                # Generate embedding if significant content has changed
+                if updates and any(field in updates for field in ['description', 'relationTag', 'type']):
+                    try:
+                        # Create combined relation data for embedding
+                        combined_data = {**existing_relation, **updates}
+                        embedding = self.inference_provider.embed_relation(combined_data)
+                        if embedding:
+                            updates['embedding'] = embedding
+                            logger.debug(f"Generated embedding for updated relation {relation_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to generate embedding for relation {relation_id}: {e}")
+                
                 await self.db_handler.update_relation(relation_id, updates)
                 logger.info(f"Updated relation {relation_id}")
             else:
+                # Generate embedding for new relation
+                try:
+                    embedding = self.inference_provider.embed_relation(relation_properties)
+                    if embedding:
+                        relation_properties['embedding'] = embedding
+                        logger.debug(f"Generated embedding for new relation {relation_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to generate embedding for relation {relation_id}: {e}")
+                
                 # Create new relation
                 new_relation = await self.db_handler.create_relation(
                     from_entity_type, from_entity_id, to_entity_type, to_entity_id, relation_properties

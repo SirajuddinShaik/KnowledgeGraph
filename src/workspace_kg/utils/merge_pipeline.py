@@ -13,8 +13,8 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
-from src.workspace_kg.utils.kuzu_db_handler import KuzuDBHandler
-from src.workspace_kg.utils.merge_handler import MergeHandler
+from workspace_kg.utils.kuzu_db_handler import KuzuDBHandler
+from workspace_kg.utils.merge_handler import MergeHandler
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ import asyncio
 import json
 import httpx
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import yaml
 import os
@@ -143,11 +143,14 @@ class KuzuDBHandler:
             if field in validated_properties and not isinstance(validated_properties[field], list):
                 validated_properties[field] = [validated_properties[field]]
 
-        # Remove timestamp fields - will be handled by database
+        # Remove timestamp fields - will be handled automatically
         if 'lastUpdated' in validated_properties:
             del validated_properties['lastUpdated']
         if 'createdAt' in validated_properties:
             del validated_properties['createdAt']
+
+        # Generate current timestamp
+        current_time = datetime.now(timezone.utc).isoformat()
 
         # For CREATE, don't include entity_id in SET clause since it's the primary key
         create_set_clauses = []
@@ -160,6 +163,11 @@ class KuzuDBHandler:
                 create_set_clauses.append(f"n.{key} = ${key}")
                 if key not in ['rawDescriptions', 'sources']:
                     match_set_clauses.append(f"n.{key} = ${key}")
+        
+        # Add timestamp to both CREATE and MATCH
+        create_set_clauses.append(f"n.lastUpdated = $current_time")
+        match_set_clauses.append(f"n.lastUpdated = $current_time")
+        params['current_time'] = current_time
         
         create_set_str = ", ".join(create_set_clauses)
         match_set_str = ", ".join(match_set_clauses)
@@ -241,16 +249,21 @@ class KuzuDBHandler:
         else:
             raw_descriptions_to_add = []
 
-        # Remove lastUpdated - will handle with now() function
+        # Remove lastUpdated - will handle automatically
         if 'lastUpdated' in updates:
             del updates['lastUpdated']
 
+        # Generate current timestamp
+        current_time = datetime.now(timezone.utc).isoformat()
+
         set_clauses = []
-        params = {"entity_id": entity_id}
+        params = {"entity_id": entity_id, "current_time": current_time}
         for key, value in updates.items():
             set_clauses.append(f"n.{key} = ${key}")
             params[key] = value
         
+        # Always add lastUpdated timestamp
+        set_clauses.append("n.lastUpdated = $current_time")
         set_clause_str = ", ".join(set_clauses)
 
         raw_desc_update_clause = ""
@@ -308,11 +321,14 @@ class KuzuDBHandler:
         elif 'sources' not in relation_properties:
             relation_properties['sources'] = []
 
-        # Remove timestamp properties - will handle with now() function
+        # Remove timestamp properties - will handle automatically
         if 'createdAt' in relation_properties:
             del relation_properties['createdAt']
         if 'lastUpdated' in relation_properties:
             del relation_properties['lastUpdated']
+
+        # Generate current timestamp
+        current_time = datetime.now(timezone.utc).isoformat()
 
         # Construct SET clause for relation properties
         create_set_clauses = []
@@ -320,7 +336,8 @@ class KuzuDBHandler:
         params = {
             "from_entity_id": from_entity_id,
             "to_entity_id": to_entity_id,
-            "relation_id": relation_properties['relation_id']
+            "relation_id": relation_properties['relation_id'],
+            "current_time": current_time
         }
         for key, value in relation_properties.items():
             params[key] = value
@@ -328,6 +345,10 @@ class KuzuDBHandler:
                 create_set_clauses.append(f"r.{key} = ${key}")
                 if key not in ['lastUpdated', 'sources']:
                     match_set_clauses.append(f"r.{key} = ${key}")
+        
+        # Add timestamp to both CREATE and MATCH
+        create_set_clauses.append("r.lastUpdated = $current_time")
+        match_set_clauses.append("r.lastUpdated = $current_time")
         
         create_set_str = ", ".join(create_set_clauses)
         match_set_str = ", ".join(match_set_clauses)
@@ -424,43 +445,37 @@ class KuzuDBHandler:
         else:
             sources_to_add = []
 
-        # Remove timestamp fields - will be handled by database
+        # Remove timestamp fields - will be handled automatically
         if 'lastUpdated' in updates:
             del updates['lastUpdated']
         if 'createdAt' in updates:
             del updates['createdAt']
 
+        # Generate current timestamp
+        current_time = datetime.now(timezone.utc).isoformat()
+
         set_clauses = []
-        params = {"relation_id": relation_id}
+        params = {"relation_id": relation_id, "current_time": current_time}
         for key, value in updates.items():
             set_clauses.append(f"r.{key} = ${key}")
             params[key] = value
         
-        set_clause_str = ", ".join(set_clauses) if set_clauses else ""
+        # Always add lastUpdated timestamp
+        set_clauses.append("r.lastUpdated = $current_time")
+        set_clause_str = ", ".join(set_clauses)
 
         sources_update_clause = ""
         if sources_to_add:
             params['sourcesToAdd'] = sources_to_add
-            if set_clause_str:
-                sources_update_clause = ", r.sources = r.sources + $sourcesToAdd"
-            else:
-                sources_update_clause = "r.sources = r.sources + $sourcesToAdd"
+            sources_update_clause = ", r.sources = r.sources + $sourcesToAdd"
 
-        if set_clause_str or sources_update_clause:
-            set_part = f"{set_clause_str}{sources_update_clause}"
-            query = f"""
-            MATCH ()-[r:Relation]->()
-            WHERE r.relation_id = $relation_id
-            SET {set_part}
-            RETURN r
-            """
-        else:
-            # No updates to make, just return the relation
-            query = f"""
-            MATCH ()-[r:Relation]->()
-            WHERE r.relation_id = $relation_id
-            RETURN r
-            """
+        set_part = f"{set_clause_str}{sources_update_clause}"
+        query = f"""
+        MATCH ()-[r:Relation]->()
+        WHERE r.relation_id = $relation_id
+        SET {set_part}
+        RETURN r
+        """
         
         try:
             result = await self.execute_cypher(query, params)
