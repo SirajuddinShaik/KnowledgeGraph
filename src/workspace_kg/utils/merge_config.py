@@ -72,6 +72,11 @@ class MergeConfig:
                 "target_field": "sources",
                 "strategy": MergeStrategy.APPEND_UNIQUE.value,
                 "priority": MergePriority.MEDIUM.value
+            },
+            "permissions": {
+                "target_field": "permissions",
+                "strategy": MergeStrategy.APPEND_UNIQUE.value,
+                "priority": MergePriority.MEDIUM.value
             }
         }
         
@@ -288,16 +293,16 @@ class MergeConfig:
         
         # Entity-specific array fields (only fields that exist in schema)
         entity_array_fields = {
-            "Person": ["rawDescriptions", "sources", "role", "aliases"],
-            "Team": ["rawDescriptions", "aliases"],  # Team doesn't have sources field
-            "Organization": ["rawDescriptions", "sources", "aliases", "location"],
-            "Project": ["rawDescriptions", "sources", "aliases", "tags"],
-            "Repository": ["rawDescriptions", "sources"],
-            "Branch": ["rawDescriptions", "sources"],
-            "CodeChangeRequest": ["rawDescriptions", "sources", "reviewers"],
-            "Issue": ["rawDescriptions", "sources", "assignees", "labels"],
-            "Event": ["rawDescriptions", "sources"],
-            "Topic": ["rawDescriptions", "sources", "aliases", "keywords", "relatedThreads"]
+            "Person": ["rawDescriptions", "sources", "role", "aliases", "permissions"],
+            "Team": ["rawDescriptions", "aliases", "permissions"],  # Team doesn't have sources field
+            "Organization": ["rawDescriptions", "sources", "aliases", "location", "permissions"],
+            "Project": ["rawDescriptions", "sources", "aliases", "tags", "permissions"],
+            "Repository": ["rawDescriptions", "sources", "permissions"],
+            "Branch": ["rawDescriptions", "sources", "permissions"],
+            "CodeChangeRequest": ["rawDescriptions", "sources", "reviewers", "permissions"],
+            "Issue": ["rawDescriptions", "sources", "assignees", "labels", "permissions"],
+            "Event": ["rawDescriptions", "sources", "permissions"],
+            "Topic": ["rawDescriptions", "sources", "aliases", "keywords", "relatedThreads", "permissions"]
         }
         
         # Global field mappings (apply to all entities if not overridden)

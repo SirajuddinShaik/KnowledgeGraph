@@ -9,6 +9,7 @@ Person:
   worksAt: STRING                # organization/company person works at
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
+  permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]              # list of doc/mail/thread IDs
   lastUpdated: STRING
   embedding: DOUBLE[]
@@ -19,6 +20,7 @@ Team:
   aliases: STRING[]
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
+  permissions: STRING[]          # email addresses from permissions field
   lastUpdated: STRING
   embedding: DOUBLE[]
 
@@ -31,6 +33,7 @@ Organization:
   cleanDescription: STRING       # cleaned/normalized description
   industry: STRING
   location: STRING[]
+  permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
   embedding: DOUBLE[]
@@ -47,6 +50,7 @@ Project:
   endDate: DATE
   client: STRING
   tags: STRING[]
+  permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
   embedding: DOUBLE[]
@@ -59,6 +63,7 @@ Repository:
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   language: STRING
+  permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
   embedding: DOUBLE[]
@@ -71,6 +76,7 @@ Branch:
   cleanDescription: STRING       # cleaned/normalized description
   createdBy: STRING
   createdAt: STRING
+  permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
   embedding: DOUBLE[]
@@ -88,6 +94,7 @@ CodeChangeRequest:   # PullRequest / MergeRequest / CodeReview combined
   branch: STRING
   createdAt: STRING
   mergedAt: STRING
+  permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
   embedding: DOUBLE[]
@@ -104,6 +111,7 @@ Issue:
   labels: STRING[]
   createdAt: STRING
   closedAt: STRING
+  permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
   embedding: DOUBLE[]
@@ -117,6 +125,7 @@ Event:
   type: STRING
   startTime: STRING
   linkedProject: STRING
+  permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
   embedding: DOUBLE[]
@@ -130,6 +139,7 @@ Topic:
   relatedThreads: STRING[]
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
+  permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
   embedding: DOUBLE[]
@@ -144,6 +154,7 @@ Relation:
   relationTag: STRING
   type: STRING
   strength: FLOAT
+  permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   createdAt: STRING
   lastUpdated: STRING

@@ -161,17 +161,19 @@ class KuzuSchemaManager:
                 try:
                     query = f"MATCH (n:{entity_type}) RETURN count(n) as count"
                     result = await self.execute_cypher(query)
-                    count = result.get('data', [{}])[0].get('count', 0) if result.get('data') else 0
+                    count = result.get('rows', [{}])[0].get('count', 0) if result.get('rows') else 0
                     table_counts[f"{entity_type}_count"] = count
-                except:
+                except Exception as e:
+                    logger.debug(f"Error getting count for {entity_type}: {e}")
                     table_counts[f"{entity_type}_count"] = 0
             
             # Get relationship count
             try:
                 query = "MATCH ()-[r:Relation]->() RETURN count(r) as count"
                 result = await self.execute_cypher(query)
-                table_counts["relationship_count"] = result.get('data', [{}])[0].get('count', 0) if result.get('data') else 0
-            except:
+                table_counts["relationship_count"] = result.get('rows', [{}])[0].get('count', 0) if result.get('rows') else 0
+            except Exception as e:
+                logger.debug(f"Error getting relationship count: {e}")
                 table_counts["relationship_count"] = 0
             
             info.update(table_counts)
