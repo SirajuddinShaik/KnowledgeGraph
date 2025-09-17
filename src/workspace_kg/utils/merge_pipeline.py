@@ -105,7 +105,13 @@ class MergePipeline:
             logger.info(f"Processing batch {i+1}/{len(batches)}")
             
             try:
-                result = await self.merge_handler.process_batch(batch)
+                # Use systematic merge processing if available
+                if hasattr(self.merge_handler, 'process_batch_systematic'):
+                    logger.info(f"📞 Calling systematic merge for batch {i+1}")
+                    result = await self.merge_handler.process_batch_systematic(batch)
+                else:
+                    logger.info(f"📞 Calling standard merge for batch {i+1}")
+                    result = await self.merge_handler.process_batch(batch)
                 batch_results.append(result)
                 
                 if result.get("status") == "success":

@@ -1,20 +1,31 @@
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import logging
 import hashlib
 import json
 import os
 
 from workspace_kg.utils.kuzu_db_handler import KuzuDBHandler
-from workspace_kg.utils.merge_config import merge_config, MergeStrategy
+from workspace_kg.utils.entity_config import entity_config, MergeStrategy
 from workspace_kg.components.embedder import InferenceProvider
+from workspace_kg.components.systematic_merge_provider import SystematicMergeProvider
 
 logger = logging.getLogger(__name__)
 
 class MergeHandler:
-    def __init__(self, kuzu_db_handler: KuzuDBHandler):
+    def __init__(self, kuzu_db_handler: KuzuDBHandler, use_systematic_merge: bool = True):
         self.db_handler = kuzu_db_handler
-        self.inference_provider = InferenceProvider()
+        try:
+            self.inference_provider = InferenceProvider()
+        except Exception as e:
+            logger.warning(f"Failed to initialize InferenceProvider, continuing without embeddings: {e}")
+            self.inference_provider = None
+        
+        self.use_systematic_merge = use_systematic_merge
+        if use_systematic_merge:
+            self.systematic_merge_provider = SystematicMergeProvider(kuzu_db_handler)
+        else:
+            self.systematic_merge_provider = None
 
     def _generate_entity_id(self, entity_type: str, attributes: Dict[str, Any]) -> str:
         """
@@ -27,12 +38,10 @@ class MergeHandler:
         unique_str = f"{entity_type}"
         
         if entity_type == "Person":
-            if "email" in attributes:
-                unique_str += f"::email::{attributes['email'].lower()}"
-            elif "name" in attributes and "email_domain" in attributes:
-                unique_str += f"::name_domain::{attributes['name'].lower()}::{attributes['email_domain'].lower()}"
-            elif "name" in attributes and "organization" in attributes:
-                unique_str += f"::name_org::{attributes['name'].lower()}::{attributes['organization'].lower()}"
+            if "emails" in attributes and attributes["emails"]:
+                unique_str += f"::email::{attributes['emails'][0].lower()}"
+            elif "name" in attributes and "worksAt" in attributes:
+                unique_str += f"::name_worksAt::{attributes['name'].lower()}::{attributes['worksAt'].lower()}"
             elif "name" in attributes:
                 unique_str += f"::name::{attributes['name'].lower()}"
             else:
@@ -54,17 +63,21 @@ class MergeHandler:
             else:
                 unique_str += f"::fallback::{json.dumps(attributes, sort_keys=True)}"
         elif entity_type == "Issue":
-            if "name" in attributes: # Assuming name is the issue ID
-                unique_str += f"::id::{attributes['name'].lower()}"
-            elif "title" in attributes and "repo" in attributes:
-                unique_str += f"::title_repo::{attributes['title'].lower()}::{attributes['repo'].lower()}"
+            if "entity_id" in attributes:
+                unique_str += f"::entity_id::{attributes['entity_id'].lower()}"
+            elif "name" in attributes: # Assuming name is the issue ID
+                unique_str += f"::name::{attributes['name'].lower()}"
+            elif "rawDescriptions" in attributes and attributes["rawDescriptions"]:
+                unique_str += f"::description::{attributes['rawDescriptions'][0].lower()}"
             else:
                 unique_str += f"::fallback::{json.dumps(attributes, sort_keys=True)}"
         elif entity_type == "CodeChangeRequest":
-            if "name" in attributes: # Assuming name is the PR ID/title
-                unique_str += f"::id::{attributes['name'].lower()}"
+            if "entity_id" in attributes:
+                unique_str += f"::entity_id::{attributes['entity_id'].lower()}"
             elif "title" in attributes and "repo" in attributes and "branch" in attributes and "author" in attributes:
                 unique_str += f"::title_repo_branch_author::{attributes['title'].lower()}::{attributes['repo'].lower()}::{attributes['branch'].lower()}::{attributes['author'].lower()}"
+            elif "title" in attributes:
+                unique_str += f"::title::{attributes['title'].lower()}"
             else:
                 unique_str += f"::fallback::{json.dumps(attributes, sort_keys=True)}"
         elif entity_type == "Project":
@@ -77,6 +90,8 @@ class MergeHandler:
         elif entity_type == "Branch":
             if "name" in attributes and "repo" in attributes:
                 unique_str += f"::name_repo::{attributes['name'].lower()}::{attributes['repo'].lower()}"
+            elif "name" in attributes:
+                unique_str += f"::name::{attributes['name'].lower()}"
             else:
                 unique_str += f"::fallback::{json.dumps(attributes, sort_keys=True)}"
         elif entity_type == "Event":
@@ -87,9 +102,9 @@ class MergeHandler:
             else:
                 unique_str += f"::fallback::{json.dumps(attributes, sort_keys=True)}"
         elif entity_type == "Topic":
-            if "topic_id" in attributes:
-                unique_str += f"::id::{attributes['topic_id'].lower()}"
-            elif "keywords" in attributes:
+            if "name" in attributes:
+                unique_str += f"::name::{attributes['name'].lower()}"
+            elif "keywords" in attributes and attributes["keywords"]:
                 unique_str += f"::keywords::{json.dumps(sorted(attributes['keywords']), sort_keys=True)}"
             else:
                 unique_str += f"::fallback::{json.dumps(attributes, sort_keys=True)}"
@@ -128,18 +143,18 @@ class MergeHandler:
         attributes = entity_data.get('attributes', {})
 
         if entity_type == "Person":
-            # 1. Email
+            # 1. Email - using emails array from schema
             if "email" in attributes:
-                query = f"MATCH (p:Person {{email: $email}}) RETURN p"
+                query = f"MATCH (p:Person) WHERE $email IN p.emails RETURN p"
                 params = {"email": attributes['email']}
                 result = await self.db_handler.execute_cypher(query, params)
                 if result and result.get('data'):
                     return result['data'][0]['p']
             
-            # 1b. Name + Email Domain (common pattern in extracted data)
-            if "name" in attributes and "email_domain" in attributes:
-                query = f"MATCH (p:Person) WHERE p.name = $name AND (p.email ENDS WITH $email_domain OR p.email_domain = $email_domain) RETURN p"
-                params = {"name": attributes['name'], "email_domain": attributes['email_domain']}
+            # 1b. Name + WorksAt (using schema-defined fields)
+            if "name" in attributes and "worksAt" in attributes:
+                query = f"MATCH (p:Person {{name: $name, worksAt: $worksAt}}) RETURN p"
+                params = {"name": attributes['name'], "worksAt": attributes['worksAt']}
                 result = await self.db_handler.execute_cypher(query, params)
                 if result and result.get('data'):
                     return result['data'][0]['p']
@@ -173,10 +188,10 @@ class MergeHandler:
                     result = await self.db_handler.execute_cypher(query, params)
                     if result and result.get('data'):
                         return result['data'][0]['p']
-            # 4. Name + Organization/Team (same full name *within the same org*) - requires 'name' and 'organization' attributes
-            if "name" in attributes and "organization" in attributes:
-                query = f"MATCH (p:Person {{name: $name, organization: $organization}}) RETURN p"
-                params = {"name": attributes['name'], "organization": attributes['organization']}
+            # 4. Name + WorksAt (same full name *within the same org*) - using schema field
+            if "name" in attributes and "worksAt" in attributes:
+                query = f"MATCH (p:Person {{name: $name, worksAt: $worksAt}}) RETURN p"
+                params = {"name": attributes['name'], "worksAt": attributes['worksAt']}
                 result = await self.db_handler.execute_cypher(query, params)
                 if result and result.get('data'):
                     return result['data'][0]['p']
@@ -187,246 +202,6 @@ class MergeHandler:
                 result = await self.db_handler.execute_cypher(query, params)
                 if result and result.get('data') and len(result['data']) == 1: # Only merge if unique by name
                     return result['data'][0]['p']
-
-        elif entity_type == "Organization":
-            # 1. Domain
-            if "domain" in attributes:
-                query = f"MATCH (o:Organization {{domain: $domain}}) RETURN o"
-                params = {"domain": attributes['domain']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['o']
-            # 2. Organization name
-            if "name" in attributes:
-                query = f"MATCH (o:Organization {{name: $name}}) RETURN o"
-                params = {"name": attributes['name']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data') and len(result['data']) == 1: # Only merge if unique by name
-                    return result['data'][0]['o']
-            # 3. Source system ID
-            if "sourceSystemId" in attributes:
-                query = f"MATCH (o:Organization {{sourceSystemId: $sourceSystemId}}) RETURN o"
-                params = {"sourceSystemId": attributes['sourceSystemId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['o']
-
-        elif entity_type == "Team":
-            # 1. Team name (case-insensitive exact match) + Org ID (team under same organization)
-            if "name" in attributes and "organizationId" in attributes: # Assuming organizationId attribute
-                query = f"MATCH (t:Team) WHERE toLower(t.name) = toLower($name) AND t.organizationId = $organizationId RETURN t"
-                params = {"name": attributes['name'], "organizationId": attributes['organizationId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['t']
-            # 2. Source system ID
-            if "sourceSystemId" in attributes:
-                query = f"MATCH (t:Team {{sourceSystemId: $sourceSystemId}}) RETURN t"
-                params = {"sourceSystemId": attributes['sourceSystemId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['t']
-            # Fallback: Team name only (if no org ID)
-            if "name" in attributes:
-                query = f"MATCH (t:Team) WHERE toLower(t.name) = toLower($name) RETURN t"
-                params = {"name": attributes['name']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data') and len(result['data']) == 1: # Only merge if unique by name
-                    return result['data'][0]['t']
-
-        elif entity_type == "Project":
-            # 1. Project name + Org (must match both) - assuming 'organization' attribute
-            if "name" in attributes and "organization" in attributes:
-                query = f"MATCH (p:Project {{name: $name, organization: $organization}}) RETURN p"
-                params = {"name": attributes['name'], "organization": attributes['organization']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['p']
-            # 2. Client ID (if linked) - assuming 'clientId' attribute
-            if "clientId" in attributes:
-                query = f"MATCH (p:Project {{clientId: $clientId}}) RETURN p"
-                params = {"clientId": attributes['clientId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['p']
-            # 3. Source system ID (Jira project ID, Asana project ID) - assuming 'sourceSystemId' attribute
-            if "sourceSystemId" in attributes:
-                query = f"MATCH (p:Project {{sourceSystemId: $sourceSystemId}}) RETURN p"
-                params = {"sourceSystemId": attributes['sourceSystemId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['p']
-            # Fallback: Project name only (less reliable)
-            if "name" in attributes:
-                query = f"MATCH (p:Project {{name: $name}}) RETURN p"
-                params = {"name": attributes['name']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data') and len(result['data']) == 1: # Only merge if unique by name
-                    return result['data'][0]['p']
-
-        elif entity_type == "Repository":
-            # 1. Repo URL (canonical identifier)
-            if "url" in attributes:
-                query = f"MATCH (r:Repository {{url: $url}}) RETURN r"
-                params = {"url": attributes['url']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['r']
-            # 2. Repo name + Org/Project (disambiguate if same name in different orgs) - assuming 'name' and 'organization' or 'project'
-            if "name" in attributes and ("organization" in attributes or "project" in attributes):
-                if "organization" in attributes:
-                    query = f"MATCH (r:Repository {{name: $name, organization: $organization}}) RETURN r"
-                    params = {"name": attributes['name'], "organization": attributes['organization']}
-                else: # Assuming 'project'
-                    query = f"MATCH (r:Repository {{name: $name, project: $project}}) RETURN r"
-                    params = {"name": attributes['name'], "project": attributes['project']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['r']
-            # 3. Source system ID (GitHub/GitLab/Bitbucket repo ID) - assuming 'sourceSystemId'
-            if "sourceSystemId" in attributes:
-                query = f"MATCH (r:Repository {{sourceSystemId: $sourceSystemId}}) RETURN r"
-                params = {"sourceSystemId": attributes['sourceSystemId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['r']
-            # Fallback: Repo name only (less reliable)
-            if "name" in attributes:
-                query = f"MATCH (r:Repository {{name: $name}}) RETURN r"
-                params = {"name": attributes['name']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data') and len(result['data']) == 1: # Only merge if unique by name
-                    return result['data'][0]['r']
-
-        elif entity_type == "Branch":
-            # 1. Branch name + Repo (combination must be unique) - assuming 'name' and 'repo' attributes
-            if "name" in attributes and "repo" in attributes:
-                query = f"MATCH (b:Branch {{name: $name, repo: $repo}}) RETURN b"
-                params = {"name": attributes['name'], "repo": attributes['repo']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['b']
-            # 2. CreatedBy + Timestamp (helps resolve re-created branches) - assuming 'createdBy' and 'createdAt'
-            if "createdBy" in attributes and "createdAt" in attributes:
-                query = f"MATCH (b:Branch {{createdBy: $createdBy, createdAt: $createdAt}}) RETURN b"
-                params = {"createdBy": attributes['createdBy'], "createdAt": attributes['createdAt']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['b']
-
-        elif entity_type == "CodeChangeRequest":
-            # 1. ID from source system (GitHub PR #, GitLab MR #) - assuming 'sourceSystemId'
-            if "sourceSystemId" in attributes:
-                query = f"MATCH (ccr:CodeChangeRequest {{sourceSystemId: $sourceSystemId}}) RETURN ccr"
-                params = {"sourceSystemId": attributes['sourceSystemId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['ccr']
-            # 2. Title + Repo + Branch + Author (as fallback) - assuming 'title', 'repo', 'branch', 'author'
-            if all(k in attributes for k in ["title", "repo", "branch", "author"]):
-                query = f"MATCH (ccr:CodeChangeRequest {{title: $title, repo: $repo, branch: $branch, author: $author}}) RETURN ccr"
-                params = {k: attributes[k] for k in ["title", "repo", "branch", "author"]}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['ccr']
-            # 3. CreatedAt timestamp - assuming 'createdAt'
-            if "createdAt" in attributes:
-                query = f"MATCH (ccr:CodeChangeRequest {{createdAt: $createdAt}}) RETURN ccr"
-                params = {"createdAt": attributes['createdAt']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['ccr']
-
-        elif entity_type == "Issue":
-            # 1. Issue ID from source system (Jira ID, GitHub Issue #) - assuming 'sourceSystemId'
-            if "sourceSystemId" in attributes:
-                query = f"MATCH (i:Issue {{sourceSystemId: $sourceSystemId}}) RETURN i"
-                params = {"sourceSystemId": attributes['sourceSystemId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['i']
-            # 2. Title + Repo/Project - assuming 'title' and 'repo' or 'project'
-            if "title" in attributes and ("repo" in attributes or "project" in attributes):
-                if "repo" in attributes:
-                    query = f"MATCH (i:Issue {{title: $title, repo: $repo}}) RETURN i"
-                    params = {"title": attributes['title'], "repo": attributes['repo']}
-                else: # Assuming 'project'
-                    query = f"MATCH (i:Issue {{title: $title, project: $project}}) RETURN i"
-                    params = {"title": attributes['title'], "project": attributes['project']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['i']
-            # 3. Reporter + CreatedAt - assuming 'reporter' and 'createdAt'
-            if "reporter" in attributes and "createdAt" in attributes:
-                query = f"MATCH (i:Issue {{reporter: $reporter, createdAt: $createdAt}}) RETURN i"
-                params = {"reporter": attributes['reporter'], "createdAt": attributes['createdAt']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['i']
-
-        elif entity_type == "Event":
-            # 1. Event ID (from calendar/system) - assuming 'sourceSystemId' or 'eventId'
-            if "sourceSystemId" in attributes:
-                query = f"MATCH (e:Event {{sourceSystemId: $sourceSystemId}}) RETURN e"
-                params = {"sourceSystemId": attributes['sourceSystemId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['e']
-            elif "eventId" in attributes:
-                query = f"MATCH (e:Event {{eventId: $eventId}}) RETURN e"
-                params = {"eventId": attributes['eventId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['e']
-            # 2. Title + StartTime + LinkedProject - assuming 'title', 'startTime', 'linkedProject'
-            if all(k in attributes for k in ["title", "startTime", "linkedProject"]):
-                query = f"MATCH (e:Event {{title: $title, startTime: $startTime, linkedProject: $linkedProject}}) RETURN e"
-                params = {k: attributes[k] for k in ["title", "startTime", "linkedProject"]}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['e']
-            # 3. Participants list (if available) - assuming 'participants' is a list
-            if "participants" in attributes and isinstance(attributes['participants'], list):
-                for participant in attributes['participants']:
-                    query = f"MATCH (e:Event) WHERE $participant IN e.participants RETURN e"
-                    params = {"participant": participant}
-                    result = await self.db_handler.execute_cypher(query, params)
-                    if result and result.get('data'):
-                        return result['data'][0]['e']
-
-        elif entity_type == "Topic":
-            # 1. Topic ID (if generated by clustering) - assuming 'sourceSystemId' or 'topicId'
-            if "sourceSystemId" in attributes:
-                query = f"MATCH (t:Topic {{sourceSystemId: $sourceSystemId}}) RETURN t"
-                params = {"sourceSystemId": attributes['sourceSystemId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['t']
-            elif "topicId" in attributes:
-                query = f"MATCH (t:Topic {{topicId: $topicId}}) RETURN t"
-                params = {"topicId": attributes['topicId']}
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['t']
-            # 2. Keywords set (exact match of cluster signature) - assuming 'keywords' is a list
-            if "keywords" in attributes and isinstance(attributes['keywords'], list):
-                # This requires a more complex query to match exact set of keywords
-                # For simplicity, we'll check if all keywords are present
-                keyword_match_clauses = [f"$keyword{i} IN t.keywords" for i in range(len(attributes['keywords']))]
-                query = f"MATCH (t:Topic) WHERE {' AND '.join(keyword_match_clauses)} AND size(t.keywords) = $keyword_count RETURN t"
-                params = {f"keyword{i}": kw for i, kw in enumerate(attributes['keywords'])}
-                params["keyword_count"] = len(attributes['keywords'])
-                result = await self.db_handler.execute_cypher(query, params)
-                if result and result.get('data'):
-                    return result['data'][0]['t']
-            # 3. RelatedThreads overlap (if same thread set) - assuming 'relatedThreads' is a list
-            if "relatedThreads" in attributes and isinstance(attributes['relatedThreads'], list):
-                for thread in attributes['relatedThreads']:
-                    query = f"MATCH (t:Topic) WHERE $thread IN t.relatedThreads RETURN t"
-                    params = {"thread": thread}
-                    result = await self.db_handler.execute_cypher(query, params)
-                    if result and result.get('data'):
-                        return result['data'][0]['t']
 
         return None
 
@@ -441,19 +216,19 @@ class MergeHandler:
         processed['rawDescriptions'] = []
         
         # Only initialize sources if entity type supports it
-        entity_array_fields = merge_config.get_entity_array_fields(entity_type)
+        entity_array_fields = entity_config.get_entity_array_fields(entity_type)
         if 'sources' in entity_array_fields:
             processed['sources'] = []
         
         # Process each attribute according to configuration
         for llm_field, value in attributes.items():
-            if not merge_config.should_merge_field(entity_type, llm_field, is_from_agent):
+            if not entity_config.should_merge_field(entity_type, llm_field, is_from_agent):
                 logger.debug(f"Skipping agent-only field '{llm_field}' for {entity_type}")
                 continue
             
             # Get target field and transformation
-            target_field = merge_config.get_target_field(entity_type, llm_field)
-            transformed_value = merge_config.transform_value(entity_type, llm_field, value, target_field)
+            target_field = entity_config.get_target_field(entity_type, llm_field)
+            transformed_value = entity_config.transform_value(entity_type, llm_field, value, target_field)
             
             # Handle field mapping
             if llm_field == "description":
@@ -462,7 +237,7 @@ class MergeHandler:
                     processed['rawDescriptions'].extend(transformed_value)
                 elif transformed_value:
                     processed['rawDescriptions'].append(transformed_value)
-            elif target_field in merge_config.field_mappings.get('timestamp_fields', []):
+            elif target_field in entity_config.get_timestamp_fields():
                 # Keep timestamp fields as strings - let DB handle conversion
                 processed[target_field] = transformed_value
             else:
@@ -474,7 +249,7 @@ class MergeHandler:
 
         
         # Ensure entity-specific array fields are properly formatted
-        entity_array_fields = merge_config.field_mappings.get('entity_array_fields', {}).get(entity_type, [])
+        entity_array_fields = entity_config.get_entity_array_fields(entity_type)
         for field in entity_array_fields:
             if field in processed and not isinstance(processed[field], list):
                 processed[field] = [processed[field]]
@@ -490,11 +265,12 @@ class MergeHandler:
         updates = {}
         
         for field, new_value in new_attributes.items():
-            if field in merge_config.field_mappings.get('always_preserve', []):
+            if field in entity_config.field_mappings.get('always_preserve', []):
                 # Never update these fields
                 continue
             
-            strategy = merge_config.get_merge_strategy(entity_type, field)
+            strategy_str = entity_config.get_merge_strategy(entity_type, field)
+            strategy = MergeStrategy(strategy_str)
             existing_value = existing_entity.get(field)
             
             if strategy == MergeStrategy.PRESERVE_EXISTING:
@@ -532,6 +308,70 @@ class MergeHandler:
                 continue
         
         return updates
+
+    async def process_batch_systematic(self, batch_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process a batch using the systematic merge approach:
+        1. Assign IDs to entities
+        2. N×N comparison with case-insensitive matching
+        3. Group entities with transitive closure
+        4. Merge groups to database with array field handling
+        5. Process relations with grouping
+        """
+        logger.info(f"🔍 Systematic merge check: use_systematic={self.use_systematic_merge}, provider_exists={self.systematic_merge_provider is not None}")
+        if not self.use_systematic_merge or not self.systematic_merge_provider:
+            logger.info("🔄 Falling back to standard merge processing")
+            return await self.process_batch(batch_data)
+        
+        # Handle batch data format
+        if 'entities' in batch_data and 'relations' in batch_data:
+            entities_list = batch_data['entities']
+            relations_list = batch_data['relations']
+            source_item_id = batch_data.get('source_item_id', 'unknown')
+        elif 'item_id' in batch_data:
+            entities_list = batch_data.get('entities', [])
+            relations_list = batch_data.get('relationships', [])
+            source_item_id = batch_data['item_id']
+        else:
+            logger.error(f"Unknown batch data format: {batch_data.keys()}")
+            return {"status": "error", "message": "Unknown batch data format"}
+        
+        logger.info(f"🎯 Processing batch with systematic merge: {len(entities_list)} entities, {len(relations_list)} relations")
+        
+        try:
+            # Step 1-4: Systematic entity processing
+            entity_groups = await self.systematic_merge_provider.process_entities_systematic(entities_list)
+            
+            # Step 5: Merge groups to database
+            entity_mapping, merge_stats = await self.systematic_merge_provider.merge_groups_to_database(
+                entity_groups, source_item_id
+            )
+            
+            # Step 6: Process relations with systematic grouping
+            relations_processed = await self.systematic_merge_provider.process_relations_systematic(
+                relations_list, entity_mapping, source_item_id
+            )
+            
+            logger.info(f"🎉 Systematic merge completed successfully!")
+            logger.info(f"   📦 Groups processed: {merge_stats['groups_processed']}")
+            logger.info(f"   🆕 Entities created: {merge_stats['entities_created']}")
+            logger.info(f"   🔀 Entities merged: {merge_stats['entities_merged']}")
+            logger.info(f"   🔗 Relations processed: {relations_processed}")
+            
+            return {
+                "status": "success",
+                "entities_processed": merge_stats["entities_processed"] + merge_stats["entities_merged"],
+                "relations_processed": relations_processed,
+                "merge_method": "systematic",
+                "merge_stats": merge_stats
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Systematic merge processing failed: {e}")
+            # Fallback to standard processing
+            logger.info("🔄 Falling back to standard merge processing")
+            return await self.process_batch(batch_data)
+
 
     async def process_batch(self, batch_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -598,25 +438,32 @@ class MergeHandler:
                     await self.db_handler.update_entity(entity_type, entity_id, updates)
                 
                 processed_entities[entity_name] = {'entity_id': entity_id, 'entity_type': entity_type}
-                logger.info(f"Merged entity {entity_type}:{entity_name} -> {entity_id}")
+                # logger.info(f"Merged entity {entity_type}:{entity_name} -> {entity_id}")
             else:
                 # Create new entity
                 entity_id = self._generate_entity_id(entity_type, processed_attributes)
-                processed_attributes['entity_id'] = entity_id
+                
+                # Only add entity_id for entities that use it as primary key
+                if entity_type in ['CodeChangeRequest', 'Issue']:
+                    processed_attributes['entity_id'] = entity_id
+                else:
+                    # For other entities, the primary key is 'name' which should already be in processed_attributes
+                    pass
                 
                 # Generate embedding for new entity
                 try:
-                    embedding = self.inference_provider.embed_entity(entity_type, processed_attributes)
-                    if embedding:
-                        processed_attributes['embedding'] = embedding
-                        logger.debug(f"Generated embedding for new entity {entity_type}:{entity_name}")
+                    if self.inference_provider:
+                        embedding = self.inference_provider.embed_entity(entity_type, processed_attributes)
+                        if embedding:
+                            processed_attributes['embedding'] = embedding
+                            logger.debug(f"Generated embedding for new entity {entity_type}:{entity_name}")
                 except Exception as e:
                     logger.warning(f"Failed to generate embedding for entity {entity_type}:{entity_name}: {e}")
                 
                 new_entity = await self.db_handler.create_entity(entity_type, processed_attributes)
                 if new_entity:
                     processed_entities[entity_name] = {'entity_id': entity_id, 'entity_type': entity_type}
-                    logger.info(f"Created new entity {entity_type}:{entity_name} -> {entity_id}")
+                    # logger.info(f"Created new entity {entity_type}:{entity_name} -> {entity_id}")
                 else:
                     logger.warning(f"Could not create entity: {entity_raw}")
                     # Fallback: if creation fails, use a temporary ID for relations in this batch
@@ -650,8 +497,8 @@ class MergeHandler:
 
             relation_properties = {
                 "relation_id": relation_id,
-                "relationTag": relation_tag,
-                "description": description,
+                "relationTag": [relation_tag] if relation_tag else [],
+                "description": [description] if description else [],
                 "strength": strength,
                 "sources": [source_item_id],
                 "type": relationship_type # Store original relationship type
@@ -662,20 +509,39 @@ class MergeHandler:
             
             if existing_relation:
                 # Update existing relation (e.g., add source, update strength if needed)
+                existing_sources = existing_relation.get('sources', [])
+                existing_descriptions = existing_relation.get('description', [])
+                existing_tags = existing_relation.get('relationTag', [])
+                
+                # Add new source if not present
+                if source_item_id not in existing_sources:
+                    existing_sources.append(source_item_id)
+                
+                # Add new description if not present
+                if description and description not in existing_descriptions:
+                    existing_descriptions.append(description)
+                
+                # Add new relation tag if not present
+                if relation_tag and relation_tag not in existing_tags:
+                    existing_tags.append(relation_tag)
+                
                 updates = {
-                    "sources": [source_item_id],
+                    "sources": existing_sources,
+                    "description": existing_descriptions,
+                    "relationTag": existing_tags,
                     "strength": max(existing_relation.get('strength', 0), strength) # Take max strength
                 }
                 
                 # Generate embedding if significant content has changed
                 if updates and any(field in updates for field in ['description', 'relationTag', 'type']):
                     try:
-                        # Create combined relation data for embedding
-                        combined_data = {**existing_relation, **updates}
-                        embedding = self.inference_provider.embed_relation(combined_data)
-                        if embedding:
-                            updates['embedding'] = embedding
-                            logger.debug(f"Generated embedding for updated relation {relation_id}")
+                        if self.inference_provider:
+                            # Create combined relation data for embedding
+                            combined_data = {**existing_relation, **updates}
+                            embedding = self.inference_provider.embed_relation(combined_data)
+                            if embedding:
+                                updates['embedding'] = embedding
+                                logger.debug(f"Generated embedding for updated relation {relation_id}")
                     except Exception as e:
                         logger.warning(f"Failed to generate embedding for relation {relation_id}: {e}")
                 
@@ -684,10 +550,11 @@ class MergeHandler:
             else:
                 # Generate embedding for new relation
                 try:
-                    embedding = self.inference_provider.embed_relation(relation_properties)
-                    if embedding:
-                        relation_properties['embedding'] = embedding
-                        logger.debug(f"Generated embedding for new relation {relation_id}")
+                    if self.inference_provider:
+                        embedding = self.inference_provider.embed_relation(relation_properties)
+                        if embedding:
+                            relation_properties['embedding'] = embedding
+                            logger.debug(f"Generated embedding for new relation {relation_id}")
                 except Exception as e:
                     logger.warning(f"Failed to generate embedding for relation {relation_id}: {e}")
                 
@@ -697,7 +564,7 @@ class MergeHandler:
                 )
                 if new_relation:
                     processed_relations.append(new_relation)
-                    logger.info(f"Created new relation {relation_id}: {from_entity_id} -> {to_entity_id}")
+                    # logger.info(f"Created new relation {relation_id}: {from_entity_id} -> {to_entity_id}")
                 else:
                     logger.warning(f"Could not create relation: {rel_raw}")
 

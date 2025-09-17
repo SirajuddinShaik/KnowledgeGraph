@@ -1,6 +1,6 @@
 # Pipeline Configuration
-PARALELL_LLM_CALLS = 5  # Number of parallel LLM calls for entity extraction
-BATCH_SIZE = 5          # Number of documents to process in each batch
+PARALELL_LLM_CALLS = 10  # Number of parallel LLM calls for entity extraction
+BATCH_SIZE = 10          # Number of documents to process in each batch
 
 # Data Type Configuration
 DEFAULT_DATA_TYPE = "email"  # Default data type for extraction

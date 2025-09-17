@@ -17,8 +17,8 @@ async def print_all_persons():
         response = await client.get("/")
         print("🔗 Connected to KuzuDB")
         
-        # Query all persons with name, aliases, and email
-        query = "MATCH (p:Person) RETURN p.name as name, p.aliases as aliases, p.email as email ORDER BY p.name"
+        # Query all persons with name, aliases, and emails
+        query = "MATCH (p:Person) RETURN p.name as name, p.aliases as aliases, p.emails as emails ORDER BY p.name"
         response = await client.post("/cypher", json={"query": query})
         result = response.json()
         
@@ -30,7 +30,7 @@ async def print_all_persons():
         for i, person in enumerate(persons, 1):
             name = person.get('name', 'N/A')
             aliases = person.get('aliases', None)
-            email = person.get('email', None)
+            emails = person.get('emails', None) # Changed from 'email' to 'emails'
             
             print(f"\n{i:2d}. Name: {name}")
             
@@ -42,10 +42,13 @@ async def print_all_persons():
             else:
                 print(f"    Aliases: None")
             
-            if email:
-                print(f"    Email: {email}")
+            if emails: # Changed from 'email' to 'emails'
+                if isinstance(emails, list): # Handle emails as a list
+                    print(f"    Emails: {', '.join(emails)}")
+                else:
+                    print(f"    Emails: {emails}")
             else:
-                print(f"    Email: None")
+                print(f"    Emails: None")
         
         print("\n" + "=" * 80)
         print(f"Total: {len(persons)} persons")

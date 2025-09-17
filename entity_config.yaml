@@ -1,0 +1,640 @@
+# Central Entity Configuration
+# This file defines entity schemas, LLM prompt templates, field mappings, and merge strategies
+
+# ==================== ENTITY SCHEMAS ====================
+# Defines what fields each entity type has and how they should be processed
+entity_schemas:
+  Person:
+    # LLM extractable fields (from prompts)
+    llm_fields:
+    - name
+    - email
+    - role
+    - aliases
+    - sourceSystemId
+    - description
+    - worksAt
+    # Database field mappings
+    mappings:
+      name:
+        type: "STRING PRIMARY KEY"
+        merge_strategy: "preserve_existing"
+        mapping: name
+      emails:
+        type: "STRING[]"
+        merge_strategy: "preserve_existing"
+        mapping: email
+      rawDescriptions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: description
+      permissions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: permissions
+      role:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: role
+      aliases:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: aliases
+      sources:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: sources
+      lastUpdated:
+        type: "STRING"
+        mapping: lastUpdated
+      sourceSystemId:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: sourceSystemId
+      worksAt:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: worksAt
+      embedding:
+        type: "DOUBLE[]"
+        merge_strategy: "preserve_existing"
+        mapping: embedding
+
+  Team:
+    llm_fields:
+    - name
+    - description
+    mappings:
+      name:
+        type: "STRING PRIMARY KEY"
+        merge_strategy: "preserve_existing"
+        mapping: name
+      aliases:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: aliases
+      rawDescriptions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: description
+      permissions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: permissions
+      sources:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: sources
+      lastUpdated:
+        type: "STRING"
+        mapping: lastUpdated
+      embedding:
+        type: "DOUBLE[]"
+        merge_strategy: "preserve_existing"
+        mapping: embedding
+
+  Organization:
+    llm_fields:
+    - name
+    - domain
+    - description
+    - industry
+    - location
+    mappings:
+      name:
+        type: "STRING PRIMARY KEY"
+        merge_strategy: "preserve_existing"
+        mapping: name
+      domain:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: domain
+      industry:
+        type: "STRING"
+        merge_strategy: "replace_if_better"
+        mapping: industry
+      location:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: location
+      aliases:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: aliases
+      rawDescriptions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: description
+      permissions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: permissions
+      sources:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: sources
+      lastUpdated:
+        type: "STRING"
+        mapping: lastUpdated
+      embedding:
+        type: "DOUBLE[]"
+        merge_strategy: "preserve_existing"
+        mapping: embedding
+
+  Project:
+    llm_fields:
+    - name
+    - description
+    - status
+    - startDate
+    - endDate
+    - client
+    - tags
+    mappings:
+      name:
+        type: "STRING PRIMARY KEY"
+        merge_strategy: "preserve_existing"
+        mapping: name
+      status:
+        type: "STRING"
+        merge_strategy: "replace_always"
+        mapping: status
+      startDate:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: startDate
+      endDate:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: endDate
+      client:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: client
+      tags:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: tags
+      aliases:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: aliases
+      rawDescriptions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: description
+      permissions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: permissions
+      sources:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: sources
+      lastUpdated:
+        type: "STRING"
+        mapping: lastUpdated
+      embedding:
+        type: "DOUBLE[]"
+        merge_strategy: "preserve_existing"
+        mapping: embedding
+
+  Repository:
+    llm_fields:
+    - name
+    - url
+    - description
+    mappings:
+      name:
+        type: "STRING PRIMARY KEY"
+        merge_strategy: "preserve_existing"
+        mapping: name
+      url:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: url
+      language:
+        type: "STRING"
+        merge_strategy: "replace_if_better"
+        mapping: language
+      rawDescriptions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: description
+      permissions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: permissions
+      sources:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: sources
+      lastUpdated:
+        type: "STRING"
+        mapping: lastUpdated
+      embedding:
+        type: "DOUBLE[]"
+        merge_strategy: "preserve_existing"
+        mapping: embedding
+
+  Branch:
+    llm_fields:
+    - name
+    - repo
+    - createdBy
+    - createdAt
+    mappings:
+      name:
+        type: "STRING PRIMARY KEY"
+        merge_strategy: "preserve_existing"
+        mapping: name
+      repo:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: repo
+      createdBy:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: createdBy
+      createdAt:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: createdAt
+      rawDescriptions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: description
+      permissions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: permissions
+      sources:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: sources
+      lastUpdated:
+        type: "STRING"
+        mapping: lastUpdated
+      embedding:
+        type: "DOUBLE[]"
+        merge_strategy: "preserve_existing"
+        mapping: embedding
+
+  CodeChangeRequest:
+    llm_fields:
+    - name
+    - title
+    - description
+    - status
+    - author
+    - createdAt
+    - mergedAt
+    - repo
+    - branch
+    mappings:
+      name:
+        type: "STRING PRIMARY KEY"
+        merge_strategy: "preserve_existing"
+        mapping: name
+      title:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: title
+      status:
+        type: "STRING"
+        merge_strategy: "replace_always"
+        mapping: status
+      author:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: author
+      repo:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: repo
+      branch:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: branch
+      createdAt:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: createdAt
+      mergedAt:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: mergedAt
+      rawDescriptions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: description
+      reviewers:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: reviewers
+      permissions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: permissions
+      sources:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: sources
+      lastUpdated:
+        type: "STRING"
+        mapping: lastUpdated
+      embedding:
+        type: "DOUBLE[]"
+        merge_strategy: "preserve_existing"
+        mapping: embedding
+
+  Issue:
+    llm_fields:
+    - name 
+    - title
+    - description
+    - status
+    - reporter
+    - labels
+    - createdAt
+    - closedAt
+    mappings:
+      name:
+        type: "STRING PRIMARY KEY"
+        merge_strategy: "preserve_existing"
+        mapping: name
+      id:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: id
+      status:
+        type: "STRING"
+        merge_strategy: "replace_always"
+        mapping: status
+      reporter:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: reporter
+      createdAt:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: createdAt
+      closedAt:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: closedAt
+      labels:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: labels
+      rawDescriptions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: description
+      assignees:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: assignees
+      permissions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: permissions
+      sources:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: sources
+      lastUpdated:
+        type: "STRING"
+        mapping: lastUpdated
+      embedding:
+        type: "DOUBLE[]"
+        merge_strategy: "preserve_existing"
+        mapping: embedding
+
+  Event:
+    llm_fields:
+    - id
+    - title
+    - description
+    - type
+    - startTime
+    - linkedProject
+    mappings:
+      name:
+        type: "STRING PRIMARY KEY"
+        merge_strategy: "preserve_existing"
+        mapping: title
+      type:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: type
+      startTime:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: startTime
+      linkedProject:
+        type: "STRING"
+        merge_strategy: "preserve_existing"
+        mapping: linkedProject
+      rawDescriptions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: description
+      permissions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: permissions
+      sources:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: sources
+      lastUpdated:
+        type: "STRING"
+        mapping: lastUpdated
+      embedding:
+        type: "DOUBLE[]"
+        merge_strategy: "preserve_existing"
+        mapping: embedding
+
+  Topic:
+    llm_fields:
+    - id
+    - name
+    - keywords
+    - relatedThreads
+    mappings:
+      name:
+        type: "STRING PRIMARY KEY"
+        merge_strategy: "preserve_existing"
+        mapping: name
+      keywords:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: keywords
+      relatedThreads:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: relatedThreads
+      aliases:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: aliases
+      rawDescriptions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: description
+      permissions:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: permissions
+      sources:
+        type: "STRING[]"
+        merge_strategy: "append_unique"
+        mapping: sources
+      lastUpdated:
+        type: "STRING"
+        mapping: lastUpdated
+      embedding:
+        type: "DOUBLE[]"
+        merge_strategy: "preserve_existing"
+        mapping: embedding
+
+systematic_merge:
+  # Entity matching rules for clustering
+  matching_rules:
+    Person:
+      - rule: "search"
+        match: "email"
+        db: "emails"
+        type: "list"
+        priority: 1
+        confidence: 0.90
+      - rule: "exact"
+        match: "name"
+        priority: 2
+        confidence: 0.95
+      - rule: "search"
+        match: "alias"
+        db: "aliases"
+        type: "list"
+        priority: 3
+        confidence: 0.80
+      - rule: "exact"
+        match: "sourceSystemId"
+        priority: 4
+        confidence: 0.85
+
+    Team:
+      - rule: "exact"
+        match: "name"
+        priority: 1
+        confidence: 0.90
+      - rule: "search"
+        match: "alias"
+        db: "aliases"
+        type: "list"
+        priority: 2
+        confidence: 0.75
+
+    Organization:
+      - rule: "exact"
+        match: "domain"
+        priority: 1
+        confidence: 0.95
+      - rule: "exact"
+        match: "name"
+        priority: 2
+        confidence: 0.80
+      - rule: "search"
+        match: "alias"
+        db: "aliases"
+        type: "list"
+        priority: 3
+        confidence: 0.70
+
+    Project:
+      - rule: "exact"
+        match: "name"
+        priority: 1
+        confidence: 0.85
+      - rule: "search"
+        match: "alias"
+        db: "aliases"
+        type: "list"
+        priority: 2
+        confidence: 0.70
+
+    Repository:
+      - rule: "exact"
+        match: "url"
+        priority: 1
+        confidence: 0.95
+      - rule: "exact"
+        match: "name"
+        priority: 2
+        confidence: 0.70
+
+    Branch:
+      - rule: "exact"
+        match: "name"
+        db: "name"
+        priority: 1
+        confidence: 0.80
+      - rule: "exact"
+        match: "repo"
+        priority: 2
+        confidence: 0.75
+
+    CodeChangeRequest:
+      - rule: "exact"
+        match: "name"
+        priority: 1
+        confidence: 0.95
+      - rule: "exact"
+        match: "title"
+        priority: 2
+        confidence: 0.80
+
+    Issue:
+      - rule: "exact"
+        match: "name"
+        priority: 1
+        confidence: 0.95
+      - rule: "exact"
+        match: "id"
+        priority: 2
+        confidence: 0.90
+
+    Event:
+      - rule: "exact"
+        match: "name"
+        priority: 1
+        confidence: 0.85
+
+    Topic:
+      - rule: "exact"
+        match: "name"
+        priority: 1
+        confidence: 0.80
+      - rule: "search"
+        match: "alias"
+        db: "aliases"
+        type: "list"
+        priority: 3
+        confidence: 0.65
+
+  # Fields to merge in systematic merge
+  merge_fields:
+    array_fields:
+      - rawDescriptions
+      - sources
+      - aliases
+      - roles
+      - permissions
+    string_fields:
+      - name
+      - email
+      - worksAt
+      - industry
+      - domain
+      - url

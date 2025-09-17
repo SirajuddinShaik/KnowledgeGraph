@@ -1,8 +1,7 @@
 # ==================== PEOPLE & ORGANIZATION ====================
 Person:
-  entity_id: STRING PRIMARY KEY
-  name: STRING
-  email: STRING
+  name: STRING PRIMARY KEY
+  emails: STRING[]
   role: STRING[]
   aliases: STRING[]
   sourceSystemId: STRING
@@ -15,18 +14,17 @@ Person:
   embedding: DOUBLE[]
 
 Team:
-  entity_id: STRING PRIMARY KEY
-  name: STRING
+  name: STRING PRIMARY KEY
   aliases: STRING[]
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   permissions: STRING[]          # email addresses from permissions field
+  sources: STRING[]              # list of doc/mail/thread IDs  
   lastUpdated: STRING
   embedding: DOUBLE[]
 
 Organization:
-  entity_id: STRING PRIMARY KEY
-  name: STRING
+  name: STRING PRIMARY KEY
   domain: STRING
   aliases: STRING[]
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
@@ -40,8 +38,7 @@ Organization:
 
 # ==================== PROJECTS & WORK ====================
 Project:
-  entity_id: STRING PRIMARY KEY
-  name: STRING
+  name: STRING PRIMARY KEY
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   status: STRING
@@ -57,11 +54,11 @@ Project:
 
 # ==================== CODE & DEVELOPMENT ====================
 Repository:
-  entity_id: STRING PRIMARY KEY
-  name: STRING
+  name: STRING PRIMARY KEY
   url: STRING
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
-  cleanDescription: STRING       # cleaned/normalized description
+  cleanDescription: STRING 
+  aliases: STRING[]      # cleaned/normalized description
   language: STRING
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
@@ -69,12 +66,12 @@ Repository:
   embedding: DOUBLE[]
 
 Branch:
-  entity_id: STRING PRIMARY KEY
-  name: STRING
+  name: STRING PRIMARY KEY
   repo: STRING
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   createdBy: STRING
+  aliases: STRING[]
   createdAt: STRING
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
@@ -82,12 +79,12 @@ Branch:
   embedding: DOUBLE[]
 
 CodeChangeRequest:   # PullRequest / MergeRequest / CodeReview combined
-  entity_id: STRING PRIMARY KEY
-  id: STRING
+  name: STRING PRIMARY KEY
   title: STRING
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   status: STRING
+  aliases: STRING[]
   author: STRING
   reviewers: STRING[]             # list of Person.entity_id
   repo: STRING
@@ -100,12 +97,12 @@ CodeChangeRequest:   # PullRequest / MergeRequest / CodeReview combined
   embedding: DOUBLE[]
 
 Issue:
-  entity_id: STRING PRIMARY KEY
+  name: STRING PRIMARY KEY
   id: STRING
-  name: STRING
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   status: STRING
+  aliases: STRING[]
   reporter: STRING
   assignees: STRING[]
   labels: STRING[]
@@ -117,12 +114,11 @@ Issue:
   embedding: DOUBLE[]
 
 Event:
-  entity_id: STRING PRIMARY KEY
-  id: STRING                     # event identifier from source system
-  name: STRING
+  name: STRING PRIMARY KEY
   rawDescriptions: STRING[]      # direct extracted text from docs/mails
   cleanDescription: STRING       # cleaned/normalized description
   type: STRING
+  aliases: STRING[]
   startTime: STRING
   linkedProject: STRING
   permissions: STRING[]          # email addresses from permissions field
@@ -131,9 +127,7 @@ Event:
   embedding: DOUBLE[]
 
 Topic:
-  entity_id: STRING PRIMARY KEY
-  id: STRING                     # topic identifier from source system
-  name: STRING
+  name: STRING PRIMARY KEY
   keywords: STRING[]
   aliases: STRING[]
   relatedThreads: STRING[]
@@ -150,8 +144,8 @@ Relation:
   FROM: ANY
   TO: ANY
   relation_id: STRING PRIMARY KEY
-  description: STRING
-  relationTag: STRING
+  description: STRING[]
+  relationTag: STRING[]
   type: STRING
   strength: FLOAT
   permissions: STRING[]          # email addresses from permissions field

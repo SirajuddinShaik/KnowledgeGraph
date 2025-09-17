@@ -113,8 +113,11 @@ class KuzuDBHandler:
             logger.error(f"Unknown entity type: {entity_type}")
             return None
         
-        if 'entity_id' not in properties:
-            logger.error(f"Missing 'entity_id' for entity type {entity_type}")
+        # All entity types now use 'name' as primary key
+        primary_key_field = 'name'
+        
+        if primary_key_field not in properties:
+            logger.error(f"Missing '{primary_key_field}' for entity type {entity_type}")
             return None
 
         # Validate properties against schema
@@ -152,14 +155,14 @@ class KuzuDBHandler:
         # Generate current timestamp
         current_time = datetime.now(timezone.utc).isoformat()
 
-        # For CREATE, don't include entity_id in SET clause since it's the primary key
+        # For CREATE, don't include primary key field in SET clause since it's used in MERGE
         create_set_clauses = []
         match_set_clauses = []
         params = {}
         
         for key, value in validated_properties.items():
             params[key] = value
-            if key != 'entity_id':
+            if key != primary_key_field:
                 create_set_clauses.append(f"n.{key} = ${key}")
                 if key not in ['rawDescriptions', 'sources']:
                     match_set_clauses.append(f"n.{key} = ${key}")
@@ -181,7 +184,7 @@ class KuzuDBHandler:
             array_updates.append("n.sources = n.sources + $sources")
         
         query = f"""
-        MERGE (n:{entity_type} {{entity_id: $entity_id}})
+        MERGE (n:{entity_type} {{{primary_key_field}: ${primary_key_field}}})
         ON CREATE SET {create_set_str}
         ON MATCH SET {match_set_str}{", ".join(array_updates)}
         RETURN n
@@ -196,17 +199,20 @@ class KuzuDBHandler:
                 # Handle both response formats
                 data = result.get('data') or result.get('rows')
                 if data:
-                    logger.info(f"Entity {entity_type}:{validated_properties['entity_id']} created/updated.")
+                    # logger.info(f"Entity {entity_type}:{validated_properties[primary_key_field]} created/updated.")
                     return data[0]['n']
-            logger.warning(f"No data returned from query for entity {entity_type}:{validated_properties['entity_id']}")
+            logger.warning(f"No data returned from query for entity {entity_type}:{validated_properties[primary_key_field]}")
             return None
         except Exception as e:
-            logger.error(f"Failed to create/update entity {entity_type}:{validated_properties['entity_id']}: {e}")
+            logger.error(f"Failed to create/update entity {entity_type}:{validated_properties[primary_key_field]}: {e}")
             return None
 
     async def get_entity(self, entity_type: str, entity_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve an entity by its type and ID."""
-        query = f"MATCH (n:{entity_type} {{entity_id: $entity_id}}) RETURN n"
+        # All entity types now use 'name' as primary key
+        primary_key_field = 'name'
+        
+        query = f"MATCH (n:{entity_type} {{{primary_key_field}: $entity_id}}) RETURN n"
         params = {"entity_id": entity_id}
         try:
             result = await self.execute_cypher(query, params)
@@ -238,6 +244,9 @@ class KuzuDBHandler:
         """Update properties of an existing entity."""
         if not updates:
             return await self.get_entity(entity_type, entity_id)
+
+        # All entity types now use 'name' as primary key
+        primary_key_field = 'name'
 
         # Ensure rawDescriptions is handled as an array append
         if 'rawDescriptions' in updates:
@@ -272,7 +281,7 @@ class KuzuDBHandler:
             raw_desc_update_clause = ", n.rawDescriptions = n.rawDescriptions + $rawDescriptionsToAdd"
 
         query = f"""
-        MATCH (n:{entity_type} {{entity_id: $entity_id}})
+        MATCH (n:{entity_type} {{{primary_key_field}: $entity_id}})
         SET {set_clause_str}{raw_desc_update_clause}
         RETURN n
         """
@@ -282,7 +291,7 @@ class KuzuDBHandler:
             if result and (result.get('data') or result.get('rows')):
                 data = result.get('data') or result.get('rows')
                 if data:
-                    logger.info(f"Entity {entity_type}:{entity_id} updated.")
+                    # logger.info(f"Entity {entity_type}:{entity_id} updated.")
                     return data[0]['n']
             return None
         except Exception as e:
@@ -291,11 +300,14 @@ class KuzuDBHandler:
 
     async def delete_entity(self, entity_type: str, entity_id: str) -> bool:
         """Delete an entity and its associated relationships."""
-        query = f"MATCH (n:{entity_type} {{entity_id: $entity_id}}) DETACH DELETE n"
+        # All entity types now use 'name' as primary key
+        primary_key_field = 'name'
+            
+        query = f"MATCH (n:{entity_type} {{{primary_key_field}: $entity_id}}) DETACH DELETE n"
         params = {"entity_id": entity_id}
         try:
             await self.execute_cypher(query, params)
-            logger.info(f"Entity {entity_type}:{entity_id} deleted.")
+            # logger.info(f"Entity {entity_type}:{entity_id} deleted.")
             return True
         except Exception as e:
             logger.error(f"Failed to delete entity {entity_type}:{entity_id}: {e}")
@@ -356,9 +368,14 @@ class KuzuDBHandler:
         if match_set_str:
             match_set_str += ", "
 
+        # Determine primary key fields for source and target entities
+        # All entities now use 'name' as primary key
+        from_primary_key = 'name'
+        to_primary_key = 'name'
+        
         query = f"""
-        MATCH (a:{from_entity_type} {{entity_id: $from_entity_id}}),
-              (b:{to_entity_type} {{entity_id: $to_entity_id}})
+        MATCH (a:{from_entity_type} {{{from_primary_key}: $from_entity_id}}),
+              (b:{to_entity_type} {{{to_primary_key}: $to_entity_id}})
         MERGE (a)-[r:Relation {{relation_id: $relation_id}}]->(b)
         ON CREATE SET {create_set_str}
         ON MATCH SET {match_set_str}r.sources = r.sources + $sources
@@ -370,7 +387,7 @@ class KuzuDBHandler:
             if result and (result.get('data') or result.get('rows')):
                 data = result.get('data') or result.get('rows')
                 if data:
-                    logger.info(f"Relation {relation_properties['relation_id']} created/updated between {from_entity_id} and {to_entity_id}.")
+                    # logger.info(f"Relation {relation_properties['relation_id']} created/updated between {from_entity_id} and {to_entity_id}.")
                     return data[0]['r']
             return None
         except Exception as e:
@@ -402,9 +419,14 @@ class KuzuDBHandler:
         Retrieve generic Relation nodes between two specific entities, optionally filtered by relationTag.
         This query uses the intermediary HAS_RELATION and RELATES_TO edges as per the schema.
         """
+        # Determine primary key fields for source and target entities
+        # All entities now use 'name' as primary key
+        from_primary_key = 'name'
+        to_primary_key = 'name'
+        
         query_parts = [
-            f"MATCH (a:{from_entity_type} {{entity_id: $from_entity_id}})",
-            f"MATCH (b:{to_entity_type} {{entity_id: $to_entity_id}})",
+            f"MATCH (a:{from_entity_type} {{{from_primary_key}: $from_entity_id}})",
+            f"MATCH (b:{to_entity_type} {{{to_primary_key}: $to_entity_id}})",
             f"MATCH (a)-[r:Relation]->(b)"
         ]
         params = {
@@ -482,7 +504,7 @@ class KuzuDBHandler:
             if result and (result.get('data') or result.get('rows')):
                 data = result.get('data') or result.get('rows')
                 if data:
-                    logger.info(f"Relation {relation_id} updated.")
+                    # logger.info(f"Relation {relation_id} updated.")
                     return data[0]['r']
             return None
         except Exception as e:
@@ -495,7 +517,7 @@ class KuzuDBHandler:
         params = {"relation_id": relation_id}
         try:
             await self.execute_cypher(query, params)
-            logger.info(f"Relation {relation_id} deleted.")
+            # logger.info(f"Relation {relation_id} deleted.")
             return True
         except Exception as e:
             logger.error(f"Failed to delete relation {relation_id}: {e}")

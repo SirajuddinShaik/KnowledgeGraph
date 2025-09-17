@@ -481,8 +481,13 @@ class VespaEmailPipeline:
                         'relationships': result.get('relationships', [])
                     }
                     
-                    # Process through merge pipeline
-                    merge_result = await self.merge_pipeline.merge_handler.process_batch(batch)
+                    # Process through merge pipeline with systematic merge
+                    if hasattr(self.merge_pipeline.merge_handler, 'process_batch_systematic'):
+                        logger.info(f"🎯 Using systematic merge for email {result.get('item_id', 'unknown')}")
+                        merge_result = await self.merge_pipeline.merge_handler.process_batch_systematic(batch)
+                    else:
+                        logger.info(f"🔧 Using standard merge for email {result.get('item_id', 'unknown')}")
+                        merge_result = await self.merge_pipeline.merge_handler.process_batch(batch)
                     
                     if merge_result.get('status') == 'success':
                         # Fix: Use the correct field names from merge_handler response
@@ -797,8 +802,8 @@ async def main():
         # Run pipeline
         config = VespaEmailPipelineConfig()
         # Limit emails for testing
-        config.max_emails = 10
-        config.batch_size = 5
+        config.max_emails = 1000
+        config.batch_size = 10
         
         result = await run_vespa_pipeline(config)
         

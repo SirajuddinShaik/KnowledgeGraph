@@ -1,17 +1,19 @@
-DEFAULT_ENTITY_TYPES = [
-    "Person",
-    "Team",
-    "Organization",
-    "Project",
-    "Repository",
-    "Branch",
-    "CodeChangeRequest",  # PR/MR
-    "Issue",
-    "Event",
-    "Topic"
-]
+from workspace_kg.utils.entity_config import entity_config
 
-EMAIL_SYSTEM_PROMPT = """---Goal---
+# Get entity types dynamically from configuration
+DEFAULT_ENTITY_TYPES = entity_config.get_entity_types()
+
+def get_entity_attribute_strings():
+    """Generate entity attribute strings from configuration"""
+    entity_strings = []
+    for entity_type in DEFAULT_ENTITY_TYPES:
+        llm_fields = entity_config.get_llm_fields(entity_type)
+        if llm_fields:
+            field_list = ', '.join(llm_fields)
+            entity_strings.append(f"**{entity_type}**: [{field_list}]")
+    return '\n'.join(entity_strings)
+
+EMAIL_SYSTEM_PROMPT_TEMPLATE = """---Goal---
 Your goal is to extract workspace-level entities and relationships from email data in tuple format. Focus on extracting business-relevant information that helps understand the organizational structure, projects, and collaboration patterns. All entity attributes are optional - extract only what is present in the data.
 
 Use English as output language.
@@ -24,6 +26,7 @@ Use English as output language.
 5. **End with completion delimiter** - <|COMPLETE|>
 6. **Use specific names that qualify the entity type** - be descriptive and specific
 7. **Names must be unique** - avoid generic names like "Project A" or "Team 1". Only extract the specific names found in the data.
+8. **Entity creation criteria** - Only create an entity if it represents something important or substantial. Avoid creating entities for minor mentions, casual references, or trivial items. Focus on entities that are central to the business context or have meaningful relationships.
 
 ---CRITICAL DATA QUALITY REQUIREMENTS---
 **CONSISTENCY RULES - FOLLOW THESE STRICTLY:**
@@ -91,16 +94,7 @@ Extract the following information for each entity type (all attributes are optio
 - **Update descriptions** - enhance entity descriptions with new context while preserving existing information
 - **Preserve existing attributes** - when merging, keep all previously extracted attributes and add new ones
 
-**Person**: [name, email, role, aliases, sourceSystemId, description, worksAt]
-**Team**: [name, description]
-**Project**: [name, description, status, startDate, endDate, client, tags]
-**Organization**: [name, description, domain, industry, location]
-**Repository**: [name, url, description]
-**Branch**: [name, repo, createdBy, createdAt]
-**CodeChangeRequest**: [id, title, description, status, author, createdAt, mergedAt, repo, branch]
-**Issue**: [id, title, description, status, reporter, labels, createdAt, closedAt]
-**Event**: [id, title, description, type, startTime, linkedProject]
-**Topic**: [id, name, keywords, relatedThreads]
+{entity_attributes}
 
 ## These are only accepted entity types and attributes. Do not extract any other types or attributes.
 
@@ -133,6 +127,14 @@ For relationships, output ONE line in this exact format:
 ✅ CORRECT: "description": "John said \\"Hello world\\" to the team"
 ❌ WRONG: "description": "John said "Hello world" to the team"
 """
+
+def get_email_system_prompt():
+    """Generate the complete system prompt with dynamic entity attributes"""
+    entity_attributes = get_entity_attribute_strings()
+    return EMAIL_SYSTEM_PROMPT_TEMPLATE.format(entity_attributes=entity_attributes)
+
+# For backward compatibility
+EMAIL_SYSTEM_PROMPT = get_email_system_prompt()
 
 ENTITY_EXTRACTION_PROMPT = """
 ---Real Data---
