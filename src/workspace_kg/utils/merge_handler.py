@@ -7,7 +7,8 @@ import os
 
 from workspace_kg.utils.kuzu_db_handler import KuzuDBHandler
 from workspace_kg.utils.entity_config import entity_config, MergeStrategy
-from workspace_kg.components.embedder import InferenceProvider
+# from workspace_kg.components.embedder import InferenceProvider
+from workspace_kg.components.ollama_embedder import InferenceProvider
 from workspace_kg.components.systematic_merge_provider import SystematicMergeProvider
 
 logger = logging.getLogger(__name__)

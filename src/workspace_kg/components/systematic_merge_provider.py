@@ -19,7 +19,7 @@ import hashlib
 import difflib
 
 from workspace_kg.utils.entity_config import entity_config
-from workspace_kg.components.embedder import InferenceProvider
+from workspace_kg.components.ollama_embedder import InferenceProvider
 
 logger = logging.getLogger(__name__)
 
@@ -1001,6 +1001,25 @@ class SystematicMergeProvider:
             # Check if relation exists
             existing_relation = await self.db_handler.get_relation(relation_id)
             
+            # Generate embedding for the relation
+            relation_embedding = None
+            if self.inference_provider:
+                try:
+                    # Create relation data dictionary for embedding
+                    relation_data_for_embedding = {
+                        "type": rel_type,
+                        "relationTag": merged_relation_tags,
+                        "description": merged_descriptions,
+                        "strength": max_strength
+                    }
+                    
+                    # Generate embedding using the inference provider's embed_relation method
+                    relation_embedding = self.inference_provider.embed_relation(relation_data_for_embedding)
+                    if relation_embedding:
+                        logger.debug(f"Generated embedding for relation {canonical_source_name} -> {canonical_target_name} ({rel_type})")
+                except Exception as e:
+                    logger.warning(f"Failed to generate embedding for relation {canonical_source_name} -> {canonical_target_name}: {e}")
+            
             relation_properties = {
                 "relation_id": relation_id,
                 "description": merged_descriptions,
@@ -1010,7 +1029,8 @@ class SystematicMergeProvider:
                 "permissions": merged_permissions,
                 "sources": merged_sources,
                 "createdAt": existing_relation.get('createdAt') if existing_relation else "",
-                "lastUpdated": ""
+                "lastUpdated": "",
+                "embedding": relation_embedding if relation_embedding else []
             }
             
             if existing_relation:
@@ -1043,6 +1063,26 @@ class SystematicMergeProvider:
                     "sources": existing_sources,
                     "strength": max(existing_relation.get('strength', 0), max_strength)
                 }
+                
+                # Generate embedding for updated relation if significant content has changed
+                if any(field in updates for field in ['description', 'relationTag', 'strength']):
+                    try:
+                        if self.inference_provider:
+                            # Create combined relation data for embedding
+                            updated_relation_data = {
+                                "type": rel_type,
+                                "relationTag": existing_tags,
+                                "description": existing_descriptions,
+                                "strength": updates['strength']
+                            }
+                            
+                            # Generate new embedding
+                            relation_embedding = self.inference_provider.embed_relation(updated_relation_data)
+                            if relation_embedding:
+                                updates['embedding'] = relation_embedding
+                                logger.debug(f"Updated embedding for relation {canonical_source_name} -> {canonical_target_name} ({rel_type})")
+                    except Exception as e:
+                        logger.warning(f"Failed to generate embedding for updated relation {canonical_source_name} -> {canonical_target_name}: {e}")
                 
                 await self.db_handler.update_relation(relation_id, updates)
                 relations_processed += 1

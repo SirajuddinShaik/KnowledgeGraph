@@ -1,13 +1,15 @@
+version: '3.8'
+
 services:
   kuzu-db:
     image: kuzudb/api-server:latest
     container_name: kuzu-lightrag
     ports:
-      - "7000:8000"  # Expose API on host:7000
+      - "7000:8000"  # API exposed at localhost:7000
     volumes:
       - ./kuzu_data:/database   # Persist DB to ./kuzu_data folder on host
     environment:
-      - KUZU_DATABASE_PATH=/kuzu/data/lightrag.db
+      - KUZU_FILE=lightrag.db      # tell explorer which file to open
       - KUZU_MAX_NUM_THREADS=4
       - KUZU_MAX_CONCURRENT_QUERIES=8
     restart: unless-stopped
@@ -17,6 +19,20 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  kuzu-explorer:
+    image: kuzudb/explorer:latest
+    container_name: kuzu-explorer
+    ports:
+      - "8000:8000"   # Explorer UI available at http://localhost:8000
+    volumes:
+      - ./kuzu_data:/database   # mount database as read-only
+    environment:
+      - KUZU_FILE=lightrag.db      # tell explorer which file to open
+      # - MODE=READ_ONLY             # avoid file locking conflict
+    depends_on:
+      - kuzu-db
+    restart: unless-stopped
 
 networks:
   default:

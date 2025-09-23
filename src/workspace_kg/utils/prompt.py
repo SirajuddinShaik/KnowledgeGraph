@@ -81,7 +81,7 @@ Use English as output language.
 - Avoid creating relationships with strength < 6
 
 **Significance Filter:**
-- DO NOT create entities for: generic topics ("Code Review"), common branches ("master" unless specifically relevant) then use master - reponame, trivial mentions
+- DO NOT create entities for: generic topics ("Code Review"), common branches ("master" unless specifically relevant) then use master-<repo_name> - reponame, trivial mentions
 - DO create entities for: specific people, projects, repositories, issues, organizations, significant events
 - Focus on entities that have clear business value and can be meaningfully connected
 

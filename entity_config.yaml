@@ -283,7 +283,6 @@ entity_schemas:
   CodeChangeRequest:
     llm_fields:
     - name
-    - title
     - description
     - status
     - author
@@ -296,10 +295,6 @@ entity_schemas:
         type: "STRING PRIMARY KEY"
         merge_strategy: "preserve_existing"
         mapping: name
-      title:
-        type: "STRING"
-        merge_strategy: "preserve_existing"
-        mapping: title
       status:
         type: "STRING"
         merge_strategy: "replace_always"
@@ -363,10 +358,6 @@ entity_schemas:
         type: "STRING PRIMARY KEY"
         merge_strategy: "preserve_existing"
         mapping: name
-      id:
-        type: "STRING"
-        merge_strategy: "preserve_existing"
-        mapping: id
       status:
         type: "STRING"
         merge_strategy: "replace_always"

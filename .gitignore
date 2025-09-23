@@ -212,3 +212,4 @@ test*
 research/
 hf_cache/
 models/
+*.DS_Store

@@ -18,7 +18,9 @@ class EntityExtractor:
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_API_BASE_URL"),
         )
-        self.model = model
+        self.model = os.getenv("LLM_MODEL_NAME", model)
+        print(f"🤖 Using model: {self.model}")
+        print(f"🔗 API endpoint: {os.getenv('LLM_BASE_URL')}")
         self.data_type = data_type
         self.auto_detect_data_type = auto_detect_data_type
         self.prompt_factory = PromptFactory()
@@ -31,7 +33,7 @@ class EntityExtractor:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.1
+                temperature=0.2
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -191,7 +193,7 @@ class EntityExtractor:
             entity_name = parts[1].strip().strip('"')
             entity_type = parts[2].strip().strip('"')
             
-            attributes = {"name": entity_name}
+            attributes = {}
             
             for i in range(3, len(parts)):
                 attr_part = parts[i].strip()
@@ -212,7 +214,7 @@ class EntityExtractor:
                                 pass
                         
                         attributes[attr_name] = attr_value
-            
+                attributes["name"] = entity_name
             # Always add email source ID to sources array
             if 'sources' not in attributes:
                 attributes['sources'] = []
