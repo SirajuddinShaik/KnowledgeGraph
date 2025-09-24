@@ -22,18 +22,25 @@ This repository contains a data processing pipeline that extracts information fr
 
 ### Installation
 
-1.  Clone the repository:
+1.  **Clone the repository:**
     ```bash
     git clone https://github.com/SirajuddinShaik/KnowledgeGraph.git
     cd KnowledgeGraph
     ```
 
-2.  Install the required Python packages:
+2.  **Start the services:**
+    This project uses Docker to run the required services. To start the Kuzu database and explorer, run the following command:
+    ```bash
+    docker-compose up -d
+    ```
+
+3.  **Install the required Python packages:**
     ```bash
     pip install -r requirements.txt
     ```
 
-3.  Set up the environment variables by creating a `.env` file. You can use the `.env.example` file as a template.
+4.  **Set up the environment variables:**
+    Create a `.env` file by copying the `.env.example` file and filling in the required values.
 
 ### Running the Pipeline
 

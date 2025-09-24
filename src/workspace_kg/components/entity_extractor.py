@@ -20,7 +20,7 @@ class EntityExtractor:
         )
         self.model = os.getenv("LLM_MODEL_NAME", model)
         print(f"🤖 Using model: {self.model}")
-        print(f"🔗 API endpoint: {os.getenv('LLM_BASE_URL')}")
+        print(f"🔗 API endpoint: {os.getenv('OPENAI_API_BASE_URL')}")
         self.data_type = data_type
         self.auto_detect_data_type = auto_detect_data_type
         self.prompt_factory = PromptFactory()
