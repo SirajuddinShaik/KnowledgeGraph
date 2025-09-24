@@ -37,6 +37,7 @@ from workspace_kg.utils.vespa_integration import VespaConnector, VespaConfig, Ve
 from workspace_kg.components.entity_extractor import EntityExtractor
 from workspace_kg.utils.merge_pipeline import MergePipeline
 from workspace_kg.utils.prompt_factory import DataType
+from workspace_kg.config.configuration import PARALELL_LLM_CALLS, BATCH_SIZE
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -241,9 +242,9 @@ class VespaEmailPipelineConfig:
         self.vespa_cluster = os.getenv('VESPA_CLUSTER', 'my_content')
         
         # Processing configuration
-        self.batch_size = int(os.getenv('VESPA_BATCH_SIZE', '50'))
+        self.batch_size = BATCH_SIZE
         self.max_emails = int(os.getenv('VESPA_MAX_EMAILS', '1000'))
-        self.parallel_extractions = int(os.getenv('PARALLEL_EXTRACTIONS', '5'))
+        self.parallel_extractions = PARALELL_LLM_CALLS
         
         # Entity extraction configuration
         self.llm_model = os.getenv('LLM_MODEL_NAME', 'gemini-2.5-flash')
@@ -408,9 +409,18 @@ class VespaEmailPipeline:
             logger.info(f"🔍 Extracting entities from {len(emails)} emails")
             logger.info(f"⚡ Using {self.config.parallel_extractions} parallel extractions")
             
-            # Extract entities and relationships with email source tracking
-            extraction_results = await self.entity_extractor.extract_entities_batch(emails)
+            semaphore = asyncio.Semaphore(self.config.parallel_extractions)
             
+            async def process_email_with_semaphore(email):
+                async with semaphore:
+                    return await self.entity_extractor.extract_entities_batch([email])
+
+            tasks = [process_email_with_semaphore(email) for email in emails]
+            extraction_results_list = await asyncio.gather(*tasks)
+            
+            # Flatten the list of lists
+            extraction_results = [item for sublist in extraction_results_list for item in sublist]
+
             # Process results and update progress
             successful_results = []
             for result in extraction_results:
@@ -537,15 +547,27 @@ class VespaEmailPipeline:
                     "progress_summary": self.progress_tracker.get_progress_summary()
                 }
             
-            # Step 3: Extract entities and relationships
-            extraction_results = await self.extract_entities_batch(unprocessed_emails)
-            if not extraction_results:
-                return {"status": "failed", "error": "Entity extraction failed"}
-            
-            # Step 4: Merge to database
-            merge_success = await self.merge_to_database(extraction_results)
-            if not merge_success:
-                return {"status": "failed", "error": "Database merge failed"}
+            # Step 3: Process emails in batches
+            all_extraction_results = []
+            for i in range(0, len(unprocessed_emails), self.config.batch_size):
+                batch = unprocessed_emails[i:i + self.config.batch_size]
+                logger.info(f"Processing batch {i // self.config.batch_size + 1} of {len(unprocessed_emails) // self.config.batch_size + 1}")
+
+                # Step 3a: Extract entities and relationships
+                extraction_results = await self.extract_entities_batch(batch)
+                if not extraction_results:
+                    logger.warning(f"Entity extraction failed for batch {i // self.config.batch_size + 1}")
+                    continue
+                
+                all_extraction_results.extend(extraction_results)
+
+                # Step 3b: Merge to database
+                merge_success = await self.merge_to_database(extraction_results)
+                if not merge_success:
+                    logger.warning(f"Database merge failed for batch {i // self.config.batch_size + 1}")
+
+            if not all_extraction_results:
+                return {"status": "failed", "error": "Entity extraction failed for all batches"}
             
             # Step 5: Final progress save and cleanup
             self.stats['end_time'] = datetime.now()

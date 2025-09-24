@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Tuple, Optional
 
 from workspace_kg.utils.prompt import DEFAULT_ENTITY_TYPES
 from workspace_kg.utils.prompt_factory import PromptFactory, DataType
-from workspace_kg.config import PARALELL_LLM_CALLS, BATCH_SIZE
+from workspace_kg.config import PARALELL_LLM_CALLS
 
 class EntityExtractor:
     def __init__(self, 
