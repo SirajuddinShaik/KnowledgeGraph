@@ -225,21 +225,6 @@ class KuzuDBHandler:
             logger.error(f"Failed to retrieve entity {entity_type}:{entity_id}: {e}")
             return None
 
-    async def get_node(self, entity_type: str, name: str) -> Optional[Dict[str, Any]]:
-        """Retrieve an entity by its type and name (for backward compatibility)."""
-        query = f"MATCH (n:{entity_type} {{name: $name}}) RETURN n"
-        params = {"name": name}
-        try:
-            result = await self.execute_cypher(query, params)
-            if result and (result.get('data') or result.get('rows')):
-                data = result.get('data') or result.get('rows')
-                if data:
-                    return data[0]['n']
-            return None
-        except Exception as e:
-            logger.error(f"Failed to retrieve entity {entity_type} with name {name}: {e}")
-            return None
-
     async def update_entity(self, entity_type: str, entity_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Update properties of an existing entity."""
         if not updates:

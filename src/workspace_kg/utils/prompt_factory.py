@@ -6,10 +6,7 @@ from .prompt import EMAIL_SYSTEM_PROMPT, ENTITY_EXTRACTION_PROMPT, DEFAULT_ENTIT
 
 class DataType(Enum):
     EMAIL = "email"
-    CODE = "code"
     DOCUMENT = "document"
-    CHAT = "chat"
-    MEETING = "meeting"
 
 
 class PromptFactory:
@@ -18,7 +15,6 @@ class PromptFactory:
     def __init__(self):
         self._system_prompts = {
             DataType.EMAIL: EMAIL_SYSTEM_PROMPT,
-            DataType.CODE: self._get_code_system_prompt(),
             DataType.DOCUMENT: self._get_document_system_prompt(),
         }
         
@@ -77,38 +73,6 @@ class PromptFactory:
         # Default to email for backward compatibility
         return DataType.EMAIL
     
-    def _get_code_system_prompt(self) -> str:
-        """System prompt optimized for code-related data"""
-        return """---Goal---
-Your goal is to extract workspace-level entities and relationships from code-related data (repositories, pull requests, commits, issues) in tuple format. Focus on extracting development workflow information that helps understand the codebase structure, collaboration patterns, and project evolution.
-
-Use English as output language.
-
----CRITICAL FORMATTING REQUIREMENTS---
-1. **MUST return ONLY tuple format** - no JSON, no markdown, no code blocks, with some reasoning explanatory text before generation
-2. **Use specific delimiters** - <|> between fields, ## between records
-3. **ALL string values MUST be properly escaped** - escape quotes and special characters
-4. **NO line breaks inside string values** - use \\n for line breaks if needed
-5. **End with completion delimiter** - <|COMPLETE|>
-6. **Use specific names that qualify the entity type** - be descriptive and specific
-7. **Names must be unique** - avoid generic names like "Project A" or "Team 1". Only extract the specific names found in the data.
-
----Code-Specific Instructions---
-1. **Focus on Development Entities**: Extract repositories, branches, commits, pull requests, issues, developers
-2. **Code Relationships**: Focus on AUTHORED, REVIEWED, MERGED, BELONGS_TO, FIXES, IMPLEMENTS relationships
-3. **Repository Structure**: Extract meaningful repository information with owner/name format
-4. **Developer Information**: Include email, role, and contribution patterns when available
-5. **Issue Tracking**: Extract issues with proper ID format and link to repositories
-6. **Branch Strategy**: Extract meaningful branches (avoid trivial feature branches unless significant)
-
----MANDATORY OUTPUT FORMAT---
-For each entity, output ONE line in this exact format:
-("entity"<|>"<entity_name>"<|>"<entity_type>"<|>"<attribute_name>": "<attribute_value>"<|>"<attribute_name>": "<attribute_value>")##
-
-For relationships, output ONE line in this exact format:
-("relationship"<|>"<source_entity>"<|>"<target_entity>"<|>"<relationship_type>"<|>"<description>"<|><strength>)##
-"""
-    
     def _get_document_system_prompt(self) -> str:
         """System prompt optimized for document data"""
         return """---Goal---
@@ -149,20 +113,3 @@ Document Content: {context}
 
 IMPORTANT: Return ONLY the tuple format below, end with <|COMPLETE|>:"""
     
-
-        """Extraction template for chat data"""
-        return """
----Real Data---
-Entity_types: {entity_types}
-Chat Messages: {context}
-
-IMPORTANT: Return ONLY the tuple format below, end with <|COMPLETE|>:"""
-    
-
-        """Extraction template for meeting data"""
-        return """
----Real Data---
-Entity_types: {entity_types}
-Meeting Content: {context}
-
-IMPORTANT: Return ONLY the tuple format below, end with <|COMPLETE|>:"""

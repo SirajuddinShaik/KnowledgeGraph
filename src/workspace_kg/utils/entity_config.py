@@ -9,13 +9,6 @@ from enum import Enum
 import yaml
 import os
 
-class MergePriority(Enum):
-    """Priority levels for field merging"""
-    CRITICAL = 1    # Never overwrite (e.g., entity_id, primary keys)
-    HIGH = 2        # Prefer existing unless new is significantly better
-    MEDIUM = 3      # Merge arrays, prefer non-null values
-    LOW = 4         # Always prefer new values
-    GENERATED = 5   # Only set by cleanup agents, never from LLM
 
 class MergeStrategy(Enum):
     """Strategies for merging different field types"""

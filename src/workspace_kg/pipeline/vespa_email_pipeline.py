@@ -492,12 +492,8 @@ class VespaEmailPipeline:
                     }
                     
                     # Process through merge pipeline with systematic merge
-                    if hasattr(self.merge_pipeline.merge_handler, 'process_batch_systematic'):
-                        logger.info(f"🎯 Using systematic merge for email {result.get('item_id', 'unknown')}")
-                        merge_result = await self.merge_pipeline.merge_handler.process_batch_systematic(batch)
-                    else:
-                        logger.info(f"🔧 Using standard merge for email {result.get('item_id', 'unknown')}")
-                        merge_result = await self.merge_pipeline.merge_handler.process_batch(batch)
+                    logger.info(f"🎯 Using systematic merge for email {result.get('item_id', 'unknown')}")
+                    merge_result = await self.merge_pipeline.process_batch_systematic(batch)
                     
                     if merge_result.get('status') == 'success':
                         # Fix: Use the correct field names from merge_handler response
