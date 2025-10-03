@@ -380,13 +380,14 @@ class SystematicMergeProvider:
         
         return None
     
-    async def merge_groups_to_database(self, entity_groups_by_type: Dict[str, List[EntityGroup]], 
+    async def merge_groups_to_database(self, entity_groups_by_type: Dict[str, List[EntityGroup]],
                                      source_item_id: str) -> Dict[str, Any]:
         """
         Step 5: Merge groups to database with proper array field handling
         Returns mapping of entity_name -> entity_info for relation processing
+        MODIFIED: Process entities one at a time to avoid 413 payload errors from large embeddings
         """
-        
+
         processed_entities = {}  # entity_name -> {entity_id, entity_type}
         stats = {
             "entities_processed": 0,
@@ -394,42 +395,47 @@ class SystematicMergeProvider:
             "entities_merged": 0,
             "groups_processed": 0
         }
-        
+
+        # Process each entity type separately
         for entity_type, groups in entity_groups_by_type.items():
-            for group in groups:
+            logger.info(f"🔄 Processing {len(groups)} groups for entity type {entity_type}")
+
+            # Process each group individually to avoid payload size issues
+            for group_idx, group in enumerate(groups):
                 stats["groups_processed"] += 1
-                
-                if group.primary_entity_id:
-                    # Merge all items into existing entity
-                    try:
-                        merged_entity_id = await self._merge_group_into_existing(
+                logger.debug(f"📦 Processing group {group_idx + 1}/{len(groups)} for {entity_type}")
+
+                try:
+                    if group.primary_entity_id:
+                        # Merge all items into existing entity - process one group at a time
+                        merged_entity_id = await self._merge_group_into_existing_single(
                             group, source_item_id
                         )
                         if merged_entity_id:
                             stats["entities_merged"] += len(group.items)
-                            
+
                             # CRITICAL FIX: Map all entity names to the EXISTING database entity ID
                             # Use the primary_entity_id (the actual database entity ID) not the merged_entity_id
                             actual_db_entity_id = group.primary_entity_id
-                            
+
                             # For merged entities, we need to be careful about the mapping
                             # The primary entity should keep its original name as the key
                             # but point to the database entity ID
                             primary_entity_name = None
                             if group.primary_entity_data:
                                 primary_entity_name = group.primary_entity_data.get('name')
-                            
+
                             # For merged entities, the primary_entity_id is the database entity ID
                             # But all relations should point to the primary_entity_name
                             final_name = primary_entity_name if primary_entity_name else actual_db_entity_id
-                            
+
                             # Map the primary entity name to itself
                             if primary_entity_name:
                                 processed_entities[primary_entity_name] = {
                                     'entity_id': primary_entity_name,
                                     'entity_type': entity_type
                                 }
-                            
+
                             # Map all other entity names to the primary entity name
                             for item in group.items:
                                 processed_entities[item.entity_name] = {
@@ -439,7 +445,7 @@ class SystematicMergeProvider:
                                     'is_alias': item.entity_name != final_name,
                                     'primary_name': final_name
                                 }
-                            
+
                             logger.info(f"✅ Merged {len(group.items)} entities into existing {actual_db_entity_id}")
                         else:
                             logger.error(f"❌ Failed to merge group {group.group_id}: merge returned None")
@@ -449,14 +455,14 @@ class SystematicMergeProvider:
                                 primary_entity_name = None
                                 if group.primary_entity_data:
                                     primary_entity_name = group.primary_entity_data.get('name')
-                                
+
                                 # Map primary entity name first
                                 if primary_entity_name:
                                     processed_entities[primary_entity_name] = {
                                         'entity_id': group.primary_entity_id,
                                         'entity_type': entity_type
                                     }
-                                
+
                                 # Map all entity names to the primary entity
                                 for item in group.items:
                                     processed_entities[item.entity_name] = {
@@ -467,53 +473,26 @@ class SystematicMergeProvider:
                                     }
                             else:
                                 self._add_fallback_entity_mapping(group, processed_entities)
-                    except Exception as e:
-                        logger.error(f"❌ Failed to merge group {group.group_id}: {e}")
-                        # Add fallback mapping using the existing entity ID if available
-                        if group.primary_entity_id:
-                            # Get primary entity name for proper mapping (now always 'name')
-                            primary_entity_name = None
-                            if group.primary_entity_data:
-                                primary_entity_name = group.primary_entity_data.get('name')
-                            
-                            # Map primary entity name first
-                            if primary_entity_name:
-                                processed_entities[primary_entity_name] = {
-                                    'entity_id': group.primary_entity_id,
-                                    'entity_type': entity_type
-                                }
-                            
-                            # Map all entity names to the primary entity
-                            for item in group.items:
-                                processed_entities[item.entity_name] = {
-                                    'entity_id': group.primary_entity_id,
-                                    'entity_type': entity_type,
-                                    'is_merged': True,
-                                    'primary_entity_name': primary_entity_name
-                                }
-                        else:
-                            self._add_fallback_entity_mapping(group, processed_entities)
-                
-                else:
-                    # Create new entity from group
-                    try:
-                        new_entity_id = await self._create_entity_from_group(
+
+                    else:
+                        # Create new entity from group - process one group at a time
+                        new_entity_id = await self._create_entity_from_group_single(
                             group, source_item_id
                         )
                         if new_entity_id:
                             stats["entities_created"] += 1
                             stats["entities_processed"] += len(group.items)
-                            
+
                             # Map all entity names to the primary entity name (not the individual item names)
                             # This ensures relations use consistent entity references
                             primary_name = new_entity_id  # This is the primary entity name
-                            
+
                             # Map the primary name to itself
                             processed_entities[primary_name] = {
                                 'entity_id': primary_name,
                                 'entity_type': entity_type
                             }
-                            
+
                             # Map all original entity names to the primary entity name
                             for item in group.items:
                                 processed_entities[item.entity_name] = {
@@ -523,15 +502,36 @@ class SystematicMergeProvider:
                                     'primary_name': primary_name
                                 }
                                 logger.debug(f"📝 Mapped entity: {item.entity_name} -> {entity_type}:{primary_name}")
-                            
+
                             logger.info(f"✅ Created new entity {new_entity_id} from {len(group.items)} items")
                         else:
                             logger.error(f"❌ Failed to create entity from group {group.group_id}: create returned None")
                             # Don't add fallback mapping for failed entities as this causes relation failures
-                    except Exception as e:
-                        logger.error(f"❌ Failed to create entity from group {group.group_id}: {e}")
-                        # Don't add fallback mapping for failed entities as this causes relation failures
-        
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to process group {group.group_id}: {e}")
+                    # Add fallback mapping for debugging
+                    if group.primary_entity_id:
+                        primary_entity_name = None
+                        if group.primary_entity_data:
+                            primary_entity_name = group.primary_entity_data.get('name')
+
+                        if primary_entity_name:
+                            processed_entities[primary_entity_name] = {
+                                'entity_id': group.primary_entity_id,
+                                'entity_type': entity_type
+                            }
+
+                        for item in group.items:
+                            processed_entities[item.entity_name] = {
+                                'entity_id': group.primary_entity_id,
+                                'entity_type': entity_type,
+                                'is_merged': True,
+                                'primary_entity_name': primary_entity_name
+                            }
+                    else:
+                        self._add_fallback_entity_mapping(group, processed_entities)
+
         return processed_entities, stats
     
     def _add_fallback_entity_mapping(self, group: EntityGroup, processed_entities: Dict[str, Dict[str, Any]]):
@@ -547,6 +547,13 @@ class SystematicMergeProvider:
             }
             logger.debug(f"Added fallback mapping: {item.entity_name} -> {fallback_entity_id}")
     
+    async def _merge_group_into_existing_single(self, group: EntityGroup, source_item_id: str) -> str:
+        """
+        Merge all items in group into existing primary entity - SINGLE ENTITY VERSION
+        This version processes entities one at a time to avoid 413 payload errors
+        """
+        return await self._merge_group_into_existing(group, source_item_id)
+
     async def _merge_group_into_existing(self, group: EntityGroup, source_item_id: str) -> str:
         """Merge all items in group into existing primary entity"""
         
@@ -684,6 +691,13 @@ class SystematicMergeProvider:
             logger.error(f"Failed to update entity {primary_entity_id} in database")
             return None
     
+    async def _create_entity_from_group_single(self, group: EntityGroup, source_item_id: str) -> str:
+        """
+        Create new entity by merging all items in group - SINGLE ENTITY VERSION
+        This version processes entities one at a time to avoid 413 payload errors
+        """
+        return await self._create_entity_from_group(group, source_item_id)
+
     async def _create_entity_from_group(self, group: EntityGroup, source_item_id: str) -> str:
         """Create new entity by merging all items in group"""
         
