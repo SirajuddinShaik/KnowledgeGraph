@@ -37,7 +37,7 @@ from workspace_kg.utils.vespa_integration import VespaConnector, VespaConfig, Ve
 from workspace_kg.components.entity_extractor import EntityExtractor
 from workspace_kg.utils.merge_pipeline import MergePipeline
 from workspace_kg.utils.prompt_factory import DataType
-from workspace_kg.config.configuration import PARALELL_LLM_CALLS, BATCH_SIZE
+from workspace_kg.config.configuration import PARALLEL_LLM_CALLS, BATCH_SIZE
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -244,7 +244,7 @@ class VespaEmailPipelineConfig:
         # Processing configuration
         self.batch_size = BATCH_SIZE
         self.max_emails = int(os.getenv('VESPA_MAX_EMAILS', '1000'))
-        self.parallel_extractions = PARALELL_LLM_CALLS
+        self.parallel_extractions = PARALLEL_LLM_CALLS
         
         # Entity extraction configuration
         self.llm_model = os.getenv('LLM_MODEL_NAME', 'gemini-2.5-flash')
@@ -363,7 +363,10 @@ class VespaEmailPipeline:
             logger.info(f"📋 Schema: {self.config.vespa_schema}")
             logger.info(f"📊 Max emails: {self.config.max_emails}")
             logger.info(f"📦 Batch size: {self.config.batch_size}")
-            
+            if self.vespa_connector is None:
+                await self.initialize()
+            if self.vespa_connector is None:
+                raise Exception("Vespa connector is not initialized")
             async with self.vespa_connector as connector:
                 # Test connection first
                 if not await connector.test_connection():
@@ -820,8 +823,8 @@ async def main():
         # Run pipeline
         config = VespaEmailPipelineConfig()
         # Limit emails for testing
-        config.max_emails = 1000
-        config.batch_size = 10
+        config.max_emails = 50
+        config.batch_size = 5
         
         result = await run_vespa_pipeline(config)
         

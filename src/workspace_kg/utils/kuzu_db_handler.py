@@ -77,7 +77,11 @@ class KuzuDBHandler:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"Kuzu API error: {e.response.status_code} - {e.response.text}")
+            if e.response.status_code == 413:
+                logger.error(f"❌ Payload too large (413): Request payload exceeds server limit. This usually indicates large embeddings or too much data in a single request.")
+                logger.error(f"💡 Solution: Process entities one at a time instead of batching them together")
+            else:
+                logger.error(f"Kuzu API error: {e.response.status_code} - {e.response.text}")
             raise
         except Exception as e:
             logger.error(f"Error executing query: {e}")
