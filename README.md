@@ -9,7 +9,7 @@ This repository contains a data processing pipeline that extracts information fr
 -   **Configurable Schema:** The knowledge graph schema is defined in a simple YAML file (`schema.yaml`), making it easy to customize.
 -   **Systematic Merging:** The pipeline includes a systematic merge process to identify and merge duplicate entities.
 -   **Vespa Integration:** It includes a connector for fetching data from a Vespa instance.
--   **Kuzu Database:** The extracted knowledge is stored in a Kuzu graph database.
+-   **Kuzu Database:** The extracted knowledge is stored in a Kuzu graph database using a unified table approach where all entities are stored in a single "Nodes" table with type distinctions.
 
 ## Getting Started
 

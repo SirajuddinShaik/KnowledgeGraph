@@ -12,7 +12,7 @@ Implements the systematic grouping approach:
 
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional, Set, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 from collections import defaultdict
 import hashlib
@@ -20,6 +20,8 @@ import difflib
 
 from workspace_kg.utils.entity_config import entity_config
 from workspace_kg.components.ollama_embedder import InferenceProvider
+# DB batch sizes available if needed for future optimization
+# from workspace_kg.config.configuration import DB_ENTITY_BATCH_SIZE, DB_RELATION_BATCH_SIZE
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +213,7 @@ class SystematicMergeProvider:
         
         # Log initial grouping results
         total_groups = sum(len(groups) for groups in entity_groups_by_type.values())
-        total_items_in_groups = sum(len(item.items) for groups in entity_groups_by_type.values() for item in groups)
+        # total_items_in_groups = sum(len(item.items) for groups in entity_groups_by_type.values() for item in groups)
         
         logger.info(f"🔄 Step 2-3: Created {total_groups} groups from {len(entity_items)} entities")
         for entity_type, groups in entity_groups_by_type.items():
@@ -223,7 +225,14 @@ class SystematicMergeProvider:
                     logger.info(f"      Group: {names}")
         
         # Step 4: Match groups against database
-        await self._match_groups_with_database(entity_groups_by_type)
+        try:
+            await self._match_groups_with_database(entity_groups_by_type)
+        except asyncio.CancelledError:
+            logger.warning("Database matching was cancelled, continuing without database matches")
+            # Continue processing without database matches
+        except Exception as e:
+            logger.error(f"Database matching failed: {e}, continuing without database matches")
+            # Continue processing without database matches
         
         return dict(entity_groups_by_type)
     
@@ -338,12 +347,14 @@ class SystematicMergeProvider:
                 if value and len(value) > 0:  # Ensure value is not empty
                     if entity_type == "Person" and match_field == "email" and db_field == "emails":
                         # Special case: Person email stored in emails array
-                        # Use string concatenation to avoid parameter issues with array queries
-                        query = f"MATCH (e:{entity_type}) WHERE ANY(x IN e.emails WHERE toLower(x) = toLower('{value}')) RETURN e"
-                        params = None
+                        # Use string interpolation to avoid Kuzu parameterized query issues with ANY function
+                        escaped_value = value.replace("'", "\\'")
+                        escaped_entity_type = entity_type.replace("'", "\\'")
+                        query = f"MATCH (e:Nodes) WHERE e.type = '{escaped_entity_type}' AND ANY(x IN e.emails WHERE toLower(x) = toLower('{escaped_value}')) RETURN e"
+                        params = {}
                     else:
-                        query = f"MATCH (e:{entity_type}) WHERE toLower(e.{db_field}) = toLower($value) RETURN e"
-                        params = {"value": value}
+                        query = f"MATCH (e:Nodes) WHERE e.type = $entity_type AND toLower(e.{db_field}) = toLower($value) RETURN e"
+                        params = {"entity_type": entity_type, "value": value}
                     
                     try:
                         result = await self.db_handler.execute_cypher(query, params)
@@ -365,12 +376,13 @@ class SystematicMergeProvider:
                 
                 search_value = attributes.get(match_field, '').strip()
                 if search_value and len(search_value) > 0:  # Ensure value is not empty
-                    # Use string concatenation to avoid parameter issues with array queries
-                    # Escape single quotes in the search value to prevent SQL injection
-                    escaped_value = search_value.replace("'", "''")
-                    query = f"MATCH (e:{entity_type}) WHERE ANY(x IN e.{db_field} WHERE toLower(x) = toLower('{escaped_value}')) RETURN e"
+                    # Use string interpolation to avoid Kuzu parameterized query issues with ANY function
+                    # Escape single quotes in the search value for security
+                    escaped_value = search_value.replace("'", "\\'")
+                    escaped_entity_type = entity_type.replace("'", "\\'")
+                    query = f"MATCH (e:Nodes) WHERE e.type = '{escaped_entity_type}' AND ANY(x IN e.{db_field} WHERE toLower(x) = toLower('{escaped_value}')) RETURN e"
                     try:
-                        result = await self.db_handler.execute_cypher(query, None)
+                        result = await self.db_handler.execute_cypher(query, {})
                         if result and (result.get('data') or result.get('rows')):
                             data = result.get('data') or result.get('rows')
                             return data[0]['e']
@@ -616,7 +628,7 @@ class SystematicMergeProvider:
         valid_string_fields = [field for field in string_fields if field in entity_schema]
         
         # Filter array fields to only those that exist in the entity schema
-        valid_array_fields = [field for field in config_array_fields if field in entity_schema]
+        # valid_array_fields = [field for field in config_array_fields if field in entity_schema]
         
         # Merge attributes from all items
         for item in group.items:
@@ -762,7 +774,7 @@ class SystematicMergeProvider:
         valid_string_fields = [field for field in string_fields if field in entity_schema]
         
         # Filter array fields to only those that exist in the entity schema
-        valid_array_fields = [field for field in config_array_fields if field in entity_schema]
+        # valid_array_fields = [field for field in config_array_fields if field in entity_schema]
         
         # Merge attributes from all items
         for item in group.items[1:]:  # Skip first item as it's the base

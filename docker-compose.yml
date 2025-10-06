@@ -9,8 +9,8 @@ services:
     volumes:
       - ./kuzu_data:/database   # Persist DB to ./kuzu_data folder on host
     environment:
-      - KUZU_FILE=lightrag.db      # tell explorer which file to open
-      # - KUZU_DATABASE_PATH=/kuzu/data/lightrag.db
+      # - KUZU_FILE=lightrag.db      # tell explorer which file to open
+      - KUZU_DATABASE_PATH=/kuzu/data/lightrag.db
       - KUZU_MAX_NUM_THREADS=4
       - KUZU_MAX_CONCURRENT_QUERIES=8
     restart: unless-stopped

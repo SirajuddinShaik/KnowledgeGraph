@@ -18,6 +18,7 @@ from workspace_kg.utils.kuzu_db_handler import KuzuDBHandler
 from workspace_kg.utils.entity_config import entity_config, MergeStrategy
 from workspace_kg.components.ollama_embedder import InferenceProvider
 from workspace_kg.components.systematic_merge_provider import SystematicMergeProvider
+from workspace_kg.config.configuration import DB_ENTITY_BATCH_SIZE, DB_RELATION_BATCH_SIZE
 
 logger = logging.getLogger(__name__)
 
@@ -83,14 +84,14 @@ class MergePipeline:
         attributes = entity_data.get('attributes', {})
         if entity_type == "Person":
             if "email" in attributes:
-                query = f"MATCH (p:Person) WHERE $email IN p.emails RETURN p"
-                params = {"email": attributes['email']}
+                query = f"MATCH (p:Nodes) WHERE p.type = $entity_type AND $email IN p.emails RETURN p"
+                params = {"email": attributes['email'], "entity_type": entity_type}
                 result = await self.db_handler.execute_cypher(query, params)
                 if result and result.get('data'):
                     return result['data'][0]['p']
             if "name" in attributes and "worksAt" in attributes:
-                query = f"MATCH (p:Person {{name: $name, worksAt: $worksAt}}) RETURN p"
-                params = {"name": attributes['name'], "worksAt": attributes['worksAt']}
+                query = f"MATCH (p:Nodes) WHERE p.type = $entity_type AND p.name = $name AND p.worksAt = $worksAt RETURN p"
+                params = {"name": attributes['name'], "worksAt": attributes['worksAt'], "entity_type": entity_type}
                 result = await self.db_handler.execute_cypher(query, params)
                 if result and result.get('data'):
                     return result['data'][0]['p']
@@ -324,8 +325,8 @@ class MergePipeline:
         try:
             stats = {}
             for entity_type in self.db_handler.entity_schemas.keys():
-                query = f"MATCH (n:{entity_type}) RETURN count(n) as count"
-                result = await self.db_handler.execute_cypher(query)
+                query = f"MATCH (n:Nodes) WHERE n.type = $entity_type RETURN count(n) as count"
+                result = await self.db_handler.execute_cypher(query, {"entity_type": entity_type})
                 count = result.get('data', [{}])[0].get('count', 0) if result.get('data') else 0
                 stats[f"{entity_type}_count"] = count
             query = "MATCH ()-[r:Relation]->() RETURN count(r) as count"
