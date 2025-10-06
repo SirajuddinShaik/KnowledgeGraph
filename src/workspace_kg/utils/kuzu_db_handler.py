@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import logging
 import yaml
 import os
+from workspace_kg.config.configuration import DEFAULT_REQUEST_TIMEOUT, CONNECTION_TIMEOUT, READ_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,18 @@ class KuzuDBHandler:
         # Disable httpx logging
         httpx_logger = logging.getLogger("httpx")
         httpx_logger.setLevel(logging.WARNING)
-        self.client = httpx.AsyncClient(base_url=api_url, timeout=30.0)
+        # Use configurable timeouts for better flexibility
+        # Set connection limits to avoid overwhelming the server
+        limits = httpx.Limits(max_keepalive_connections=5, max_connections=10)
+        self.client = httpx.AsyncClient(
+            base_url=api_url, 
+            timeout=httpx.Timeout(
+                timeout=DEFAULT_REQUEST_TIMEOUT, 
+                connect=CONNECTION_TIMEOUT, 
+                read=READ_TIMEOUT
+            ),
+            limits=limits
+        )
         self.schema_file = schema_file
         self.entity_schemas: Dict[str, Any] = {}
         self.relationship_schemas: Dict[str, Any] = {}
@@ -66,27 +78,74 @@ class KuzuDBHandler:
         
         return entity_schemas, relationship_schemas
 
-    async def execute_cypher(self, query: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Execute a Cypher query against Kuzu API"""
+    async def execute_cypher(self, query: str, params: Dict[str, Any] = None, max_retries: int = 3) -> Dict[str, Any]:
+        """Execute a Cypher query against Kuzu API with retry logic"""
         payload = {"query": query}
         if params:
             payload["params"] = params
         
-        try:
-            response = await self.client.post("/cypher", json=payload)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 413:
-                logger.error(f"❌ Payload too large (413): Request payload exceeds server limit. This usually indicates large embeddings or too much data in a single request.")
-                logger.error(f"💡 Solution: Process entities one at a time instead of batching them together")
-            else:
-                logger.error(f"Kuzu API error: {e.response.status_code} - {e.response.text}")
-            raise
-        except Exception as e:
-            logger.error(f"Error executing query: {e}")
-            raise
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.post("/cypher", json=payload)
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                last_error = e
+                if e.response.status_code == 413:
+                    logger.error(f"❌ Payload too large (413): Request payload exceeds server limit. This usually indicates large embeddings or too much data in a single request.")
+                    logger.error(f"💡 Solution: Process entities one at a time instead of batching them together")
+                    # Don't retry 413 errors - they won't succeed
+                    raise
+                elif e.response.status_code >= 500:
+                    # Server error - might be transient
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 2
+                        logger.warning(f"Server error {e.response.status_code}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                        await asyncio.sleep(wait_time)
+                        continue
+                else:
+                    logger.error(f"Kuzu API error: {e.response.status_code} - {e.response.text}")
+                    raise
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 2
+                    logger.warning(f"Connection error, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries}): {e}")
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"Connection failed after {max_retries} attempts: {e}")
+                    raise
+            except asyncio.CancelledError:
+                # Don't retry cancelled operations
+                logger.warning("Query execution was cancelled")
+                raise
+            except Exception as e:
+                last_error = e
+                logger.error(f"Error executing query: {e}")
+                raise
+        
+        # If we get here, all retries failed
+        if last_error:
+            raise last_error
+        else:
+            raise Exception(f"Query failed after {max_retries} attempts")
 
+    async def health_check(self) -> bool:
+        """Check if the database is healthy and responsive"""
+        try:
+            # Simple query to test connection with minimal timeout
+            timeout = httpx.Timeout(5.0)
+            async with httpx.AsyncClient(base_url=self.api_url, timeout=timeout) as client:
+                response = await client.post("/cypher", json={"query": "RETURN 1 as test"})
+                response.raise_for_status()
+                result = response.json()
+                return result is not None and ('data' in result or 'rows' in result)
+        except Exception as e:
+            logger.warning(f"Database health check failed: {e}")
+            return False
+    
     async def close(self):
         """Close the HTTP client"""
         await self.client.aclose()
@@ -111,7 +170,7 @@ class KuzuDBHandler:
     async def create_entity(self, entity_type: str, properties: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Create a new entity (node) in the database.
-        Properties must include 'entity_id'.
+        Properties must include 'name'.
         """
         if entity_type not in self.entity_schemas:
             logger.error(f"Unknown entity type: {entity_type}")
@@ -131,6 +190,9 @@ class KuzuDBHandler:
             logger.error(f"No valid properties for entity type {entity_type}")
             return None
 
+        # Add the type field to distinguish entity types
+        validated_properties['type'] = entity_type
+
         # Ensure rawDescriptions is an array
         if 'rawDescriptions' in validated_properties and not isinstance(validated_properties['rawDescriptions'], list):
             validated_properties['rawDescriptions'] = [validated_properties['rawDescriptions']]
@@ -145,7 +207,7 @@ class KuzuDBHandler:
                 validated_properties['sources'] = []
 
         # Ensure other array fields are arrays
-        array_fields = ['role', 'aliases', 'location', 'tags', 'reviewers', 'assignees', 'labels', 'keywords', 'relatedThreads']
+        array_fields = ['role', 'aliases', 'location', 'tags', 'reviewers', 'assignees', 'labels', 'keywords', 'relatedThreads', 'emails']
         for field in array_fields:
             if field in validated_properties and not isinstance(validated_properties[field], list):
                 validated_properties[field] = [validated_properties[field]]
@@ -188,7 +250,7 @@ class KuzuDBHandler:
             array_updates.append("n.sources = n.sources + $sources")
         
         query = f"""
-        MERGE (n:{entity_type} {{{primary_key_field}: ${primary_key_field}}})
+        MERGE (n:Nodes {{{primary_key_field}: ${primary_key_field}}})
         ON CREATE SET {create_set_str}
         ON MATCH SET {match_set_str}{", ".join(array_updates)}
         RETURN n
@@ -216,8 +278,8 @@ class KuzuDBHandler:
         # All entity types now use 'name' as primary key
         primary_key_field = 'name'
         
-        query = f"MATCH (n:{entity_type} {{{primary_key_field}: $entity_id}}) RETURN n"
-        params = {"entity_id": entity_id}
+        query = f"MATCH (n:Nodes) WHERE n.type = $entity_type AND n.{primary_key_field} = $entity_id RETURN n"
+        params = {"entity_id": entity_id, "entity_type": entity_type}
         try:
             result = await self.execute_cypher(query, params)
             if result and (result.get('data') or result.get('rows')):
@@ -255,7 +317,7 @@ class KuzuDBHandler:
         current_time = datetime.now(timezone.utc).isoformat()
 
         set_clauses = []
-        params = {"entity_id": entity_id, "current_time": current_time}
+        params = {"entity_id": entity_id, "entity_type": entity_type, "current_time": current_time}
         for key, value in updates.items():
             set_clauses.append(f"n.{key} = ${key}")
             params[key] = value
@@ -270,7 +332,7 @@ class KuzuDBHandler:
             raw_desc_update_clause = ", n.rawDescriptions = n.rawDescriptions + $rawDescriptionsToAdd"
 
         query = f"""
-        MATCH (n:{entity_type} {{{primary_key_field}: $entity_id}})
+        MATCH (n:Nodes) WHERE n.type = $entity_type AND n.{primary_key_field} = $entity_id
         SET {set_clause_str}{raw_desc_update_clause}
         RETURN n
         """
@@ -292,8 +354,8 @@ class KuzuDBHandler:
         # All entity types now use 'name' as primary key
         primary_key_field = 'name'
             
-        query = f"MATCH (n:{entity_type} {{{primary_key_field}: $entity_id}}) DETACH DELETE n"
-        params = {"entity_id": entity_id}
+        query = f"MATCH (n:Nodes) WHERE n.type = $entity_type AND n.{primary_key_field} = $entity_id DETACH DELETE n"
+        params = {"entity_id": entity_id, "entity_type": entity_type}
         try:
             await self.execute_cypher(query, params)
             # logger.info(f"Entity {entity_type}:{entity_id} deleted.")
@@ -362,9 +424,14 @@ class KuzuDBHandler:
         from_primary_key = 'name'
         to_primary_key = 'name'
         
+        # Add entity types to params
+        params["from_entity_type"] = from_entity_type
+        params["to_entity_type"] = to_entity_type
+        
         query = f"""
-        MATCH (a:{from_entity_type} {{{from_primary_key}: $from_entity_id}}),
-              (b:{to_entity_type} {{{to_primary_key}: $to_entity_id}})
+        MATCH (a:Nodes), (b:Nodes)
+        WHERE a.type = $from_entity_type AND a.{from_primary_key} = $from_entity_id
+          AND b.type = $to_entity_type AND b.{to_primary_key} = $to_entity_id
         MERGE (a)-[r:Relation {{relation_id: $relation_id}}]->(b)
         ON CREATE SET {create_set_str}
         ON MATCH SET {match_set_str}r.sources = r.sources + $sources
@@ -414,13 +481,16 @@ class KuzuDBHandler:
         to_primary_key = 'name'
         
         query_parts = [
-            f"MATCH (a:{from_entity_type} {{{from_primary_key}: $from_entity_id}})",
-            f"MATCH (b:{to_entity_type} {{{to_primary_key}: $to_entity_id}})",
+            f"MATCH (a:Nodes), (b:Nodes)",
+            f"WHERE a.type = $from_entity_type AND a.{from_primary_key} = $from_entity_id",
+            f"  AND b.type = $to_entity_type AND b.{to_primary_key} = $to_entity_id",
             f"MATCH (a)-[r:Relation]->(b)"
         ]
         params = {
             "from_entity_id": from_entity_id,
-            "to_entity_id": to_entity_id
+            "to_entity_id": to_entity_id,
+            "from_entity_type": from_entity_type,
+            "to_entity_type": to_entity_type
         }
 
         if relation_tag:

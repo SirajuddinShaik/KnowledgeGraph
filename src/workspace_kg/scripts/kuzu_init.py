@@ -89,33 +89,36 @@ class KuzuSchemaManager:
             logger.error(f"Error executing query: {e}")
             raise
     
-    def _generate_node_table_query(self, entity_type: str, attributes: Dict[str, str]) -> str:
-        """Generate CREATE NODE TABLE query from schema"""
-        attr_definitions = []
+    def _generate_node_table_query(self) -> str:
+        """Generate CREATE NODE TABLE query for unified Nodes table"""
+        # Collect all unique fields from all entity types
+        all_fields = {}
         
-        for attr_name, attr_type in attributes.items():
+        # Add the type field to distinguish entity types
+        all_fields['type'] = 'STRING'
+        all_fields['name'] = 'STRING PRIMARY KEY'
+        
+        # Collect all fields from all entity schemas
+        for entity_type, attributes in self.entity_schemas.items():
+            for attr_name, attr_type in attributes.items():
+                if attr_name not in all_fields:
+                    all_fields[attr_name] = attr_type
+        
+        # Build attribute definitions
+        attr_definitions = []
+        for attr_name, attr_type in all_fields.items():
             attr_definitions.append(f"{attr_name} {attr_type}")
         
         attributes_str = ",\n            ".join(attr_definitions)
         
         return f"""
-        CREATE NODE TABLE IF NOT EXISTS {entity_type}(
+        CREATE NODE TABLE IF NOT EXISTS Nodes(
             {attributes_str}
         )
         """
     
     def _generate_relationship_table_query(self) -> str:
-        """Generate comprehensive relationship table for all entity types"""
-        entity_types = list(self.entity_schemas.keys())
-        
-        # Generate all possible FROM-TO combinations
-        from_to_combinations = []
-        for from_type in entity_types:
-            for to_type in entity_types:
-                from_to_combinations.append(f"FROM {from_type} TO {to_type}")
-        
-        from_to_str = ",\n            ".join(from_to_combinations)
-        
+        """Generate relationship table connecting Nodes to Nodes"""
         # Get relationship attributes (excluding FROM and TO which are handled above)
         rel_attributes = self.relationship_schemas["Relation"]
         attr_definitions = []
@@ -127,7 +130,7 @@ class KuzuSchemaManager:
         
         return f"""
         CREATE REL TABLE IF NOT EXISTS Relation(
-            {from_to_str}{attributes_str}
+            FROM Nodes TO Nodes{attributes_str}
         )
         """
     
@@ -155,12 +158,12 @@ class KuzuSchemaManager:
                 "relationship_types": self.relationship_types
             }
             
-            # Get table counts
+            # Get counts by type from unified Nodes table
             table_counts = {}
             for entity_type in self.entity_schemas.keys():
                 try:
-                    query = f"MATCH (n:{entity_type}) RETURN count(n) as count"
-                    result = await self.execute_cypher(query)
+                    query = f"MATCH (n:Nodes) WHERE n.type = $entity_type RETURN count(n) as count"
+                    result = await self.execute_cypher(query, {"entity_type": entity_type})
                     count = result.get('rows', [{}])[0].get('count', 0) if result.get('rows') else 0
                     table_counts[f"{entity_type}_count"] = count
                 except Exception as e:
@@ -192,13 +195,9 @@ class KuzuSchemaManager:
             await self.execute_cypher("MATCH ()-[r]->() DELETE r")
             logger.info("  - Deleted all relationships")
             
-            # Delete all nodes
-            for entity_type in self.entity_schemas.keys():
-                try:
-                    await self.execute_cypher(f"MATCH (n:{entity_type}) DELETE n")
-                    logger.info(f"  - Deleted all {entity_type} nodes")
-                except Exception as e:
-                    logger.warning(f"  - Could not delete {entity_type} nodes: {e}")
+            # Delete all nodes from Nodes table
+            await self.execute_cypher("MATCH (n:Nodes) DELETE n")
+            logger.info("  - Deleted all nodes")
             
             logger.info("✅ Database cleaned successfully")
             return True
@@ -212,21 +211,19 @@ class KuzuSchemaManager:
         try:
             logger.info("🗑️ Dropping all tables...")
             
-            # First drop relationship tables (including any that might exist)
-            for rel_table in self.relationship_types:
-                try:
-                    await self.execute_cypher(f"DROP TABLE {rel_table}")
-                    logger.info(f"  - Dropped {rel_table} table")
-                except Exception as e:
-                    logger.debug(f"  - {rel_table} table not found: {e}")
+            # Drop Relation table
+            try:
+                await self.execute_cypher("DROP TABLE Relation")
+                logger.info(f"  - Dropped Relation table")
+            except Exception as e:
+                logger.debug(f"  - Relation table not found: {e}")
             
-            # Then drop all node tables
-            for entity_type in self.entity_schemas.keys():
-                try:
-                    await self.execute_cypher(f"DROP TABLE {entity_type}")
-                    logger.info(f"  - Dropped {entity_type} table")
-                except Exception as e:
-                    logger.debug(f"  - {entity_type} table not found: {e}")
+            # Drop Nodes table
+            try:
+                await self.execute_cypher("DROP TABLE Nodes")
+                logger.info(f"  - Dropped Nodes table")
+            except Exception as e:
+                logger.debug(f"  - Nodes table not found: {e}")
             
             logger.info("✅ All tables dropped successfully")
             return True
@@ -240,12 +237,11 @@ class KuzuSchemaManager:
         try:
             logger.info("🚀 Creating database schema...")
             
-            # Create node tables
-            logger.info("📋 Creating node tables...")
-            for entity_type, attributes in self.entity_schemas.items():
-                query = self._generate_node_table_query(entity_type, attributes)
-                await self.execute_cypher(query)
-                logger.info(f"  ✅ Created {entity_type} table")
+            # Create unified Nodes table
+            logger.info("📋 Creating unified Nodes table...")
+            query = self._generate_node_table_query()
+            await self.execute_cypher(query)
+            logger.info(f"  ✅ Created Nodes table")
             
             # Create relationship table
             logger.info("🔗 Creating relationship table...")
@@ -309,18 +305,16 @@ class KuzuSchemaManager:
     async def list_tables(self) -> List[str]:
         """List all existing tables in the database"""
         try:
-            # This is a simplified approach - KuzuDB might have different syntax
             tables = []
             
-            # Try to query each expected table
-            for entity_type in self.entity_schemas.keys():
-                try:
-                    await self.execute_cypher(f"MATCH (n:{entity_type}) RETURN count(n) LIMIT 1")
-                    tables.append(entity_type)
-                except:
-                    pass
+            # Check for Nodes table
+            try:
+                await self.execute_cypher("MATCH (n:Nodes) RETURN count(n) LIMIT 1")
+                tables.append("Nodes")
+            except:
+                pass
             
-            # Check for relationship table
+            # Check for Relation table
             try:
                 await self.execute_cypher("MATCH ()-[r:Relation]->() RETURN count(r) LIMIT 1")
                 tables.append("Relation")
