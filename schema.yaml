@@ -11,7 +11,7 @@ Person:
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]              # list of doc/mail/thread IDs
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]
 
 Team:
   name: STRING PRIMARY KEY
@@ -21,7 +21,7 @@ Team:
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]              # list of doc/mail/thread IDs  
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]
 
 Organization:
   name: STRING PRIMARY KEY
@@ -34,7 +34,7 @@ Organization:
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]
 
 # ==================== PROJECTS & WORK ====================
 Project:
@@ -50,7 +50,7 @@ Project:
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]
 
 # ==================== CODE & DEVELOPMENT ====================
 Repository:
@@ -63,7 +63,7 @@ Repository:
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]
 
 Branch:
   name: STRING PRIMARY KEY
@@ -76,7 +76,7 @@ Branch:
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]
 
 CodeChangeRequest:   # PullRequest / MergeRequest / CodeReview combined
   name: STRING PRIMARY KEY
@@ -94,7 +94,7 @@ CodeChangeRequest:   # PullRequest / MergeRequest / CodeReview combined
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]
 
 Issue:
   name: STRING PRIMARY KEY
@@ -111,7 +111,7 @@ Issue:
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]
 
 Event:
   name: STRING PRIMARY KEY
@@ -124,7 +124,7 @@ Event:
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]
 
 Topic:
   name: STRING PRIMARY KEY
@@ -136,7 +136,7 @@ Topic:
   permissions: STRING[]          # email addresses from permissions field
   sources: STRING[]
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]
 
 # ==================== RELATIONSHIPS ====================
 # Generic Relation type to connect any two entities
@@ -152,4 +152,4 @@ Relation:
   sources: STRING[]
   createdAt: STRING
   lastUpdated: STRING
-  embedding: DOUBLE[]
+  embedding: FLOAT[1024]

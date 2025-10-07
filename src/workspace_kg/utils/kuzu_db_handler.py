@@ -299,41 +299,67 @@ class KuzuDBHandler:
         # All entity types now use 'name' as primary key
         primary_key_field = 'name'
 
-        # Ensure rawDescriptions is handled as an array append
-        if 'rawDescriptions' in updates:
-            if not isinstance(updates['rawDescriptions'], list):
-                updates['rawDescriptions'] = [updates['rawDescriptions']]
+        # Get schema to identify array fields
+        entity_schema = self.entity_schemas.get(entity_type, {})
+        
+        # Identify array fields that should be appended rather than replaced
+        array_fields_to_append = {}
+        non_array_updates = {}
+        
+        for key, value in updates.items():
+            if key == 'lastUpdated':
+                continue  # Skip - will handle automatically
+                
+            field_schema = entity_schema.get(key, {})
+            field_type = field_schema.get('type', '') if isinstance(field_schema, dict) else str(field_schema)
             
-            # Remove from updates to handle separately in query
-            raw_descriptions_to_add = updates.pop('rawDescriptions')
-        else:
-            raw_descriptions_to_add = []
-
-        # Remove lastUpdated - will handle automatically
-        if 'lastUpdated' in updates:
-            del updates['lastUpdated']
+            # Check if this is an array field that should be appended
+            if field_type.endswith('[]'):
+                # Ensure value is a list
+                if not isinstance(value, list):
+                    value = [value] if value else []
+                array_fields_to_append[key] = value
+            else:
+                non_array_updates[key] = value
 
         # Generate current timestamp
         current_time = datetime.now(timezone.utc).isoformat()
 
+        # For array fields, we need to ensure append_unique behavior by fetching current values,
+        # merging with new values, and deduplicating before updating
+        if array_fields_to_append:
+            # Fetch current entity to get existing array values
+            current_entity = await self.get_entity(entity_type, entity_id)
+            if current_entity:
+                for field_name, values_to_add in array_fields_to_append.items():
+                    existing_values = current_entity.get(field_name, []) or []
+                    if not isinstance(existing_values, list):
+                        existing_values = [existing_values] if existing_values else []
+                    
+                    # Merge and deduplicate
+                    merged_values = list(existing_values)
+                    for value in values_to_add:
+                        if value is not None and value not in merged_values:
+                            merged_values.append(value)
+                    
+                    # Add to non_array_updates to be set directly
+                    non_array_updates[field_name] = merged_values
+
+        # Build SET clauses for all fields (now including merged array fields)
         set_clauses = []
         params = {"entity_id": entity_id, "entity_type": entity_type, "current_time": current_time}
-        for key, value in updates.items():
+        
+        for key, value in non_array_updates.items():
             set_clauses.append(f"n.{key} = ${key}")
             params[key] = value
         
         # Always add lastUpdated timestamp
         set_clauses.append("n.lastUpdated = $current_time")
-        set_clause_str = ", ".join(set_clauses)
-
-        raw_desc_update_clause = ""
-        if raw_descriptions_to_add:
-            params['rawDescriptionsToAdd'] = raw_descriptions_to_add
-            raw_desc_update_clause = ", n.rawDescriptions = n.rawDescriptions + $rawDescriptionsToAdd"
+        final_set_clause = ", ".join(set_clauses)
 
         query = f"""
         MATCH (n:Nodes) WHERE n.type = $entity_type AND n.{primary_key_field} = $entity_id
-        SET {set_clause_str}{raw_desc_update_clause}
+        SET {final_set_clause}
         RETURN n
         """
         
